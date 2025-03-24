@@ -4,7 +4,7 @@ import path from 'path'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  base: '/',  // 确保使用根路径
+  base: './',  // 修改为相对路径
   plugins: [vue()],
   resolve: {
     alias: {
@@ -14,5 +14,18 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 3000
+  },
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets',
+    emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'element-plus': ['element-plus'],
+          'vue-vendor': ['vue', 'vue-router', 'pinia']
+        }
+      }
+    }
   }
 })

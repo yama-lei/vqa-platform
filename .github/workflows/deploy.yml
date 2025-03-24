@@ -30,8 +30,10 @@ jobs:
         env:
           NODE_OPTIONS: '--max_old_space_size=4096'
 
-      - name: Copy CNAME
-        run: cp CNAME dist/
+      - name: Prepare for deployment
+        run: |
+          cp CNAME dist/
+          cp dist/index.html dist/404.html
 
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
