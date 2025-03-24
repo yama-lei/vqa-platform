@@ -22,10 +22,12 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
+          'vendor': ['vue', 'vue-router', 'pinia'],
           'element-plus': ['element-plus'],
-          'vue-vendor': ['vue', 'vue-router', 'pinia']
+          'element-plus-icons': ['@element-plus/icons-vue']
         }
       }
-    }
+    },
+    chunkSizeWarningLimit: 2000
   }
 })
