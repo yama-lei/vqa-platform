@@ -1,12 +1,27 @@
 import OSS from 'ali-oss'
 
+// 添加调试日志
+console.log('环境变量检查:', {
+  VITE_OSS_ACCESS_KEY_ID: import.meta.env.VITE_OSS_ACCESS_KEY_ID,
+  VITE_OSS_ACCESS_KEY_SECRET: import.meta.env.VITE_OSS_ACCESS_KEY_SECRET ? '已设置' : '未设置'
+})
+
 // OSS客户端配置
 const ossConfig = {
   region: 'oss-cn-nanjing',
   bucket: 'vqaplatform',
-  accessKeyId: process.env.VITE_OSS_ACCESS_KEY_ID,
-  accessKeySecret: process.env.VITE_OSS_ACCESS_KEY_SECRET
+  accessKeyId: import.meta.env.VITE_OSS_ACCESS_KEY_ID,
+  accessKeySecret: import.meta.env.VITE_OSS_ACCESS_KEY_SECRET,
+  secure: true // 强制使用 HTTPS
 }
+
+// 添加配置检查日志
+console.log('OSS配置:', {
+  region: ossConfig.region,
+  bucket: ossConfig.bucket,
+  accessKeyId: ossConfig.accessKeyId ? '已设置' : '未设置',
+  accessKeySecret: ossConfig.accessKeySecret ? '已设置' : '未设置'
+})
 
 /**
  * 创建OSS客户端
@@ -21,100 +36,203 @@ export const createOssClient = () => {
  * @param {String} objectName 对象名称
  * @param {String} operation 操作类型，'get'或'put'
  * @param {Number} expires URL有效期（秒）
- * @returns {String} 签名URL
+ * @returns {Promise<String>} 签名URL
  */
-export const getSignedUrl = (objectName, operation = 'get', expires = 3600) => {
+export const getSignedUrl = async (objectName, operation = 'get', expires = 3600) => {
   try {
     const client = createOssClient()
     
-    // 确保objectName格式正确
-    const normalizedObjectName = objectName.startsWith('/') ? objectName.slice(1) : objectName
+    // 添加详细的日志
+    console.log('原始objectName:', objectName)
     
+    // 确保objectName格式正确
+    let normalizedObjectName = objectName
+    if (normalizedObjectName.startsWith('/')) {
+      normalizedObjectName = normalizedObjectName.slice(1)
+    }
+    
+    // 检查是否已经包含类型目录前缀
+    const typePrefixes = ['paper/', 'code/', 'note/', 'video/']
+    const hasTypePrefix = typePrefixes.some(prefix => normalizedObjectName.startsWith(prefix))
+    
+    if (!hasTypePrefix) {
+      // 如果没有类型前缀，根据文件扩展名添加
+      const extension = normalizedObjectName.split('.').pop().toLowerCase()
+      let typePrefix = 'other/'
+      
+      if (extension === 'pdf') {
+        typePrefix = 'paper/'
+      } else if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(extension)) {
+        typePrefix = 'note/'
+      } else if (['mp4', 'webm', 'ogg'].includes(extension)) {
+        typePrefix = 'video/'
+      } else if (['js', 'py', 'java', 'cpp', 'c', 'h', 'html', 'css'].includes(extension)) {
+        typePrefix = 'code/'
+      }
+      
+      normalizedObjectName = typePrefix + normalizedObjectName
+    }
+    
+    console.log('标准化后的objectName:', normalizedObjectName)
+    
+    // 获取文件扩展名
+    const extension = normalizedObjectName.split('.').pop().toLowerCase()
+    console.log('文件扩展名:', extension)
+    
+    // 根据文件类型设置不同的响应头
     const options = {
       expires,
       method: operation.toUpperCase(),
       'response-content-disposition': 'inline',
       'response-content-type': getContentType(normalizedObjectName),
       'response-cache-control': 'no-cache',
-      process: normalizedObjectName.toLowerCase().endsWith('.pdf') ? 'pdf' : undefined
+      'response-cors-allow-origin': '*',
+      'response-cors-allow-methods': 'GET, HEAD, OPTIONS',
+      'response-cors-allow-headers': '*',
+      'response-cors-expose-headers': 'ETag, Content-Length',
+      'response-content-security-policy': "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; frame-ancestors 'self' *"
     }
     
+    // 对PDF文件特殊处理
+    if (extension === 'pdf') {
+      options['response-content-type'] = 'application/pdf'
+      options['response-content-disposition'] = 'inline; filename="' + encodeURIComponent(normalizedObjectName.split('/').pop()) + '"'
+      options['response-content-encoding'] = 'identity'
+    }
+    
+    // 对Office文件特殊处理
+    if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(extension)) {
+      options['response-content-type'] = 'application/octet-stream'
+      options['response-content-disposition'] = 'inline; filename="' + encodeURIComponent(normalizedObjectName.split('/').pop()) + '"'
+      options['response-content-encoding'] = 'identity'
+    }
+    
+    // 对图片文件特殊处理
+    if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(extension)) {
+      options['response-content-type'] = `image/${extension}`
+      options['response-content-disposition'] = 'inline'
+      options['response-cache-control'] = 'public, max-age=31536000'
+    }
+    
+    // 对视频文件特殊处理
+    if (['mp4', 'webm', 'ogg'].includes(extension)) {
+      options['response-content-type'] = `video/${extension}`
+      options['response-content-disposition'] = 'inline'
+      options['response-cache-control'] = 'public, max-age=31536000'
+    }
+    
+    // 对Markdown文件特殊处理
+    if (extension === 'md') {
+      options['response-content-type'] = 'text/markdown'
+      options['response-content-disposition'] = 'inline'
+    }
+    
+    // 对文本文件特殊处理
+    if (extension === 'txt') {
+      options['response-content-type'] = 'text/plain'
+      options['response-content-disposition'] = 'inline'
+    }
+    
+    console.log('生成签名URL的选项:', options)
+    
     const url = client.signatureUrl(normalizedObjectName, options)
-    console.log(`生成${operation}签名URL成功:`, url)
-    return url
+    // 确保 URL 使用 HTTPS
+    const secureUrl = url.replace('http://', 'https://')
+    console.log(`生成${operation}签名URL成功:`, secureUrl)
+    return secureUrl
   } catch (error) {
     console.error('生成签名URL失败:', error)
+    console.error('错误详情:', {
+      message: error.message,
+      code: error.code,
+      requestId: error.requestId,
+      objectName: objectName
+    })
     throw error
   }
-}
-
-// 添加一个辅助函数来获取文件的content-type
-const getContentType = (fileName) => {
-  const extension = fileName.split('.').pop().toLowerCase()
-  const contentTypes = {
-    'pdf': 'application/pdf',
-    'jpg': 'image/jpeg',
-    'jpeg': 'image/jpeg',
-    'png': 'image/png',
-    'gif': 'image/gif',
-    'mp4': 'video/mp4',
-    'webm': 'video/webm',
-    'md': 'text/markdown',
-    'txt': 'text/plain'
-  }
-  return contentTypes[extension] || 'application/octet-stream'
 }
 
 /**
  * 上传文件到OSS
  * @param {File} file 要上传的文件对象
  * @param {String} directory 存储目录
- * @param {Function} onProgress 上传进度回调函数，参数为0-1之间的小数
  * @returns {Promise<Object>} 上传结果，包含URL和对象名称
  */
-export const uploadFile = async (file, directory = 'uploads', onProgress = null) => {
+export const uploadFile = async (file, directory = '') => {
   try {
-    console.log('开始上传文件:', file.name, '类型:', file.type, '大小:', file.size)
+    const client = createOssClient()
     
-    // 直接使用原始文件名，只添加目录前缀
-    const objectName = `${directory}/${file.name}`
+    // 如果用户指定了目录，使用用户指定的目录
+    // 否则使用默认的other目录
+    const typeDir = directory || 'other'
+    console.log('使用目录:', typeDir)
+    
+    // 生成OSS对象名称
+    const objectName = `${typeDir}/${file.name}`
     console.log('生成的对象名称:', objectName)
     
-    const client = createOssClient()
-    console.log('OSS客户端创建成功')
+    // 上传文件
+    const result = await client.put(objectName, file)
+    console.log('文件上传成功:', result)
     
-    // 使用普通上传
-    const result = await client.put(objectName, file, {
-      headers: {
-        'Content-Type': file.type || getContentType(file.name),
-        'Cache-Control': 'no-cache',
-        'x-oss-forbid-overwrite': false
-      },
-      progress: (p) => {
-        if (onProgress) {
-          onProgress(p)
-        }
-        console.log('上传进度:', Math.floor(p * 100) + '%')
-      }
-    })
+    // 生成访问URL
+    const accessUrl = await getSignedUrl(objectName)
+    console.log('生成访问URL:', accessUrl)
     
-    if (result.res && result.res.status === 200) {
-      console.log('上传成功, 状态码:', result.res.status)
-      // 返回可访问的签名URL和对象信息
-      const accessUrl = getSignedUrl(objectName)
-      return {
-        url: accessUrl,
-        objectName: objectName,
-        name: file.name,
-        size: file.size,
-        status: 'success'
-      }
-    } else {
-      throw new Error(`上传失败: ${result.res?.status || '未知错误'}`)
+    return {
+      success: true,
+      url: accessUrl,
+      objectName: objectName,
+      type: typeDir
     }
   } catch (error) {
-    console.error('上传文件失败:', error)
+    console.error('文件上传失败:', error)
     throw error
+  }
+}
+
+/**
+ * 获取文件的Content-Type
+ * @param {String} fileName 文件名
+ * @returns {String} Content-Type
+ */
+const getContentType = (fileName) => {
+  const extension = fileName.split('.').pop().toLowerCase()
+  switch (extension) {
+    case 'pdf':
+      return 'application/pdf'
+    case 'doc':
+    case 'docx':
+      return 'application/msword'
+    case 'xls':
+    case 'xlsx':
+      return 'application/vnd.ms-excel'
+    case 'ppt':
+    case 'pptx':
+      return 'application/vnd.ms-powerpoint'
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg'
+    case 'png':
+      return 'image/png'
+    case 'gif':
+      return 'image/gif'
+    case 'svg':
+      return 'image/svg+xml'
+    case 'webp':
+      return 'image/webp'
+    case 'mp4':
+      return 'video/mp4'
+    case 'webm':
+      return 'video/webm'
+    case 'ogg':
+      return 'video/ogg'
+    case 'md':
+      return 'text/markdown'
+    case 'txt':
+      return 'text/plain'
+    default:
+      return 'application/octet-stream'
   }
 }
 
@@ -127,21 +245,46 @@ export const uploadFile = async (file, directory = 'uploads', onProgress = null)
 export const listFiles = async (directory = '', maxKeys = 100) => {
   const client = createOssClient()
   try {
-    const result = await client.list({
-      prefix: directory,
-      'max-keys': maxKeys
-    })
+    console.log('正在获取目录列表:', directory)
+    
+    // 如果没有指定目录，则获取所有类型的文件
+    const typeDirectories = directory ? [directory] : ['paper/', 'code/', 'note/', 'video/', 'other/']
+    let allFiles = []
+    
+    for (const typeDir of typeDirectories) {
+      console.log('正在获取目录:', typeDir)
+      const result = await client.list({
+        prefix: typeDir,
+        'max-keys': maxKeys
+      })
+      
+      if (result.objects) {
+        console.log(`目录 ${typeDir} 中的文件:`, result.objects.map(obj => obj.name))
+        allFiles = allFiles.concat(result.objects)
+      }
+    }
+    
+    console.log('获取到的所有文件列表:', allFiles.map(obj => obj.name))
     
     // 为每个文件生成签名URL，使它们可以被访问
-    return result.objects ? result.objects.map(obj => ({
+    const filesWithUrls = await Promise.all(allFiles.map(async obj => ({
       name: obj.name.split('/').pop(), // 提取文件名
-      url: getSignedUrl(obj.name),
+      url: await getSignedUrl(obj.name),
       objectName: obj.name,
       size: obj.size,
-      lastModified: obj.lastModified
-    })) : []
+      lastModified: obj.lastModified,
+      type: obj.name.split('/')[0] // 提取文件类型
+    })))
+    
+    return filesWithUrls
   } catch (error) {
     console.error('获取文件列表失败:', error)
+    console.error('错误详情:', {
+      message: error.message,
+      code: error.code,
+      requestId: error.requestId,
+      directory: directory
+    })
     throw error
   }
 }

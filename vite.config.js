@@ -1,8 +1,18 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import path from 'path'
 
-// https://vite.dev/config/
+// https://vitejs.dev/config/
 export default defineConfig({
+  base: '/',  // 确保使用根路径
   plugins: [vue()],
-  base: '/vqa-platform/', // 使用仓库名作为基础路径
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, 'src')
+    }
+  },
+  server: {
+    host: '0.0.0.0',
+    port: 3000
+  }
 })

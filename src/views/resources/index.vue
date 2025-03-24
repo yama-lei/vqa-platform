@@ -73,33 +73,8 @@
     <!-- 资源预览对话框 -->
     <el-dialog v-model="previewDialogVisible" :title="currentResource?.name" width="80%" destroy-on-close>
       <div class="preview-container">
-        <!-- PDF预览 -->
-        <div v-if="currentResource?.type === 'paper' || (currentResource?.type === 'note' && isPdfFile(currentResource?.name))" class="pdf-preview">
-          <div class="pdf-actions">
-            <el-button type="primary" @click="openInNewTab(currentResource?.url)">在新窗口中预览</el-button>
-            <el-button @click="downloadResource(currentResource)">下载文件</el-button>
-          </div>
-        </div>
-        
-        <!-- Markdown预览 -->
-        <div v-if="currentResource?.type === 'note' && isMarkdownFile(currentResource?.name)" class="markdown-preview" v-html="renderedMarkdown"></div>
-        
-        <!-- 图片预览 -->
-        <div v-if="isImageFile(currentResource?.name)" class="image-preview">
-          <el-image :src="currentResource?.url" fit="contain" style="width: 100%; max-height: 600px;"></el-image>
-        </div>
-        
-        <!-- 视频预览 -->
-        <div v-if="currentResource?.type === 'video'" class="video-preview">
-          <video controls style="width: 100%; max-height: 600px;">
-            <source :src="currentResource?.url" :type="getVideoType(currentResource?.name)">
-            您的浏览器不支持视频播放
-          </video>
-        </div>
-        
-        <!-- 其他文件 -->
-        <div v-if="!isPdfFile(currentResource?.name) && !isMarkdownFile(currentResource?.name) && !isImageFile(currentResource?.name) && currentResource?.type !== 'video'" class="other-preview">
-          <el-empty description="无法预览此类型文件，请下载后查看"></el-empty>
+        <div class="unknown-preview">
+          <p>该文件类型暂不支持预览，请下载后查看</p>
         </div>
       </div>
       <template #footer>
@@ -116,6 +91,7 @@ import { marked } from 'marked'
 import { Document, Folder, VideoPlay, Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { downloadFile as ossDownload, listFiles, getSignedUrl, createOssClient } from '../../utils/oss'
+import VuePdfEmbed from 'vue-pdf-embed'
 
 const loading = ref(false)
 const searchKeyword = ref('')
@@ -194,31 +170,36 @@ const handleCurrentChange = (page) => {
   currentPage.value = page
 }
 
+// 获取文件类型
+const getFileType = (fileName) => {
+  if (!fileName) return 'unknown'
+  
+  // 解码文件名（处理中文）
+  const decodedFileName = decodeURIComponent(fileName)
+  const typePrefix = decodedFileName.split('/')[0] // 获取类型前缀
+  
+  // 根据目录前缀确定文件类型
+  switch (typePrefix) {
+    case 'paper':
+      return 'paper'
+    case 'code':
+      return 'code'
+    case 'note':
+      return 'note'
+    case 'video':
+      return 'video'
+    default:
+      return 'other'
+  }
+}
+
 // 预览资源
 const previewResource = async (resource) => {
   try {
-    // 确保URL是最新的预览URL
-    if (resource.objectName) {
-      // 重新获取带有预览参数的签名URL
-      const previewUrl = getSignedUrl(resource.objectName, 'get', 3600)
-      currentResource.value = {
-        ...resource,
-        url: previewUrl
-      }
-      
-      // 如果是PDF文件，使用新窗口打开预览
-      if (isPdfFile(resource.name)) {
-        window.open(previewUrl, '_blank')
-        return
-      }
-    }
+    console.log('开始预览资源:', resource)
     
-    // 如果是Markdown，需要渲染
-    if (resource.type === 'note' && isMarkdownFile(resource.name)) {
-      const mockMarkdown = `# VQA模型架构笔记\n\n## 简介\n\nVQA（视觉问答）是一项结合计算机视觉和自然语言处理的任务。\n\n## 模型架构\n\n1. 图像编码器\n2. 问题编码器\n3. 多模态融合\n4. 答案预测`
-      renderedMarkdown.value = marked(mockMarkdown)
-    }
-    
+    // 直接显示预览对话框
+    currentResource.value = resource
     previewDialogVisible.value = true
   } catch (error) {
     console.error('预览失败:', error)
@@ -242,64 +223,42 @@ const downloadResource = (resource) => {
   }
 }
 
-// 将上传历史转换为资源列表格式
-const convertUploadHistoryToResources = () => {
-  const uploadHistoryStr = localStorage.getItem('uploadHistory')
-  if (!uploadHistoryStr) return
+// 根据文件名判断类型
+const determineType = (fileName) => {
+  if (!fileName) {
+    console.log('文件名为空，返回other类型')
+    return 'other'
+  }
   
-  try {
-    const uploadHistory = JSON.parse(uploadHistoryStr)
-    
-    // 转换格式并合并到现有资源中
-    const convertedResources = uploadHistory.map(item => ({
-      name: item.fileName,
-      type: item.type || determineType(item.fileName),
-      url: item.url,
-      objectName: item.objectName,
-      uploadTime: item.uploadTime,
-      uploader: '当前用户',
-      description: item.description || ''
-    }))
-    
-    // 使用objectName作为唯一标识符来去重
-    const existingObjectNames = new Set(resources.value.map(r => r.objectName))
-    const newResources = convertedResources.filter(r => !existingObjectNames.has(r.objectName))
-    
-    resources.value = [...resources.value, ...newResources]
-    totalResources.value = resources.value.length
-    
-    // 清理已经不存在于OSS的资源
-    cleanupResources()
-  } catch (error) {
-    console.error('转换上传历史失败:', error)
+  // 解码文件名（处理中文）
+  const decodedFileName = decodeURIComponent(fileName)
+  console.log('解码后的文件名:', decodedFileName)
+  
+  // 获取类型前缀
+  const typePrefix = decodedFileName.split('/')[0]
+  console.log('类型前缀:', typePrefix)
+  
+  // 根据目录前缀确定文件类型
+  let fileType = 'other'
+  switch (typePrefix) {
+    case 'paper':
+      fileType = 'paper'
+      break
+    case 'code':
+      fileType = 'code'
+      break
+    case 'note':
+      fileType = 'note'
+      break
+    case 'video':
+      fileType = 'video'
+      break
+    default:
+      console.log('未找到类型前缀，返回other类型')
   }
-}
-
-// 添加清理资源的函数
-const cleanupResources = async () => {
-  try {
-    const fileList = await listFiles()
-    const ossFiles = new Set(fileList.map(f => f.objectName))
-    
-    // 过滤掉不在OSS中的资源
-    resources.value = resources.value.filter(r => ossFiles.has(r.objectName))
-    
-    // 更新本地存储
-    const cleanedHistory = resources.value
-      .filter(r => r.uploader === '当前用户')
-      .map(r => ({
-        fileName: r.name,
-        objectName: r.objectName,
-        type: r.type,
-        url: r.url,
-        uploadTime: r.uploadTime,
-        description: r.description
-      }))
-    
-    localStorage.setItem('uploadHistory', JSON.stringify(cleanedHistory))
-  } catch (error) {
-    console.error('清理资源失败:', error)
-  }
+  
+  console.log('最终确定的文件类型:', fileType)
+  return fileType
 }
 
 // 组件挂载时获取资源列表
@@ -312,15 +271,20 @@ onMounted(async () => {
     
     // 将OSS文件列表转换为资源格式
     if (fileList && fileList.length > 0) {
-      resources.value = fileList.map(file => ({
-        name: file.name,
-        type: determineType(file.name),
-        url: file.url,
-        objectName: file.name,
-        uploadTime: new Date(file.lastModified).toLocaleString(),
-        uploader: '系统用户',
-        description: ''
-      }))
+      resources.value = fileList.map(file => {
+        // 确保使用完整的objectName来判断类型
+        const fileType = determineType(file.objectName || file.name)
+        console.log(`文件 ${file.objectName || file.name} 的类型被确定为:`, fileType)
+        return {
+          name: file.name,
+          type: fileType,
+          url: file.url,
+          objectName: file.objectName || file.name,
+          uploadTime: new Date(file.lastModified).toLocaleString(),
+          uploader: '系统用户',
+          description: ''
+        }
+      })
     }
     
     // 如果有本地上传历史，也合并进来
@@ -341,20 +305,38 @@ onMounted(async () => {
   }
 })
 
-// 根据文件名判断类型
-const determineType = (fileName) => {
-  const extension = fileName.split('.').pop().toLowerCase()
+// 将上传历史转换为资源列表格式
+const convertUploadHistoryToResources = () => {
+  const uploadHistoryStr = localStorage.getItem('uploadHistory')
+  if (!uploadHistoryStr) return
   
-  if (['pdf', 'doc', 'docx'].includes(extension)) {
-    return 'paper'
-  } else if (['md', 'txt'].includes(extension)) {
-    return 'note'
-  } else if (['mp4', 'avi', 'mov', 'webm'].includes(extension)) {
-    return 'video'
-  } else if (['zip', 'rar', 'tar', 'gz', 'py', 'js', 'java', 'c', 'cpp'].includes(extension)) {
-    return 'code'
-  } else {
-    return 'other'
+  try {
+    const uploadHistory = JSON.parse(uploadHistoryStr)
+    
+    // 转换格式并合并到现有资源中
+    const convertedResources = uploadHistory.map(item => {
+      // 确保使用完整的objectName来判断类型
+      const fileType = determineType(item.objectName || item.fileName)
+      console.log(`上传历史中的文件 ${item.objectName || item.fileName} 的类型被确定为:`, fileType)
+      return {
+        name: item.fileName,
+        type: fileType,
+        url: item.url,
+        objectName: item.objectName || item.fileName,
+        uploadTime: item.uploadTime,
+        uploader: '当前用户',
+        description: item.description || ''
+      }
+    })
+    
+    // 使用objectName作为唯一标识符来去重
+    const existingObjectNames = new Set(resources.value.map(r => r.objectName))
+    const newResources = convertedResources.filter(r => !existingObjectNames.has(r.objectName))
+    
+    resources.value = [...resources.value, ...newResources]
+    totalResources.value = resources.value.length
+  } catch (error) {
+    console.error('转换上传历史失败:', error)
   }
 }
 
@@ -402,47 +384,13 @@ const openInNewTab = (url) => {
 
 .preview-container {
   min-height: 400px;
-}
-
-.pdf-preview, .video-preview, .markdown-preview, .image-preview, .other-preview {
-  width: 100%;
-  height: 600px;
-  border: 1px solid #ebeef5;
-  border-radius: 4px;
-  overflow: auto;
-}
-
-.markdown-preview {
-  padding: 20px;
-}
-
-.pdf-preview {
-  width: 100%;
-  height: 600px;
-  border: 1px solid #ebeef5;
-  border-radius: 4px;
-  overflow: hidden;
-  background: #f5f7fa;
-}
-
-.pdf-fallback {
-  padding: 20px;
-  text-align: center;
-}
-
-.pdf-fallback p {
-  margin-bottom: 15px;
-  color: #909399;
-}
-
-.pdf-fallback .el-button {
-  margin: 0 10px;
-}
-
-.pdf-actions {
   display: flex;
   justify-content: center;
-  gap: 16px;
-  padding: 20px;
+  align-items: center;
+}
+
+.unknown-preview {
+  color: #909399;
+  font-size: 16px;
 }
 </style> 

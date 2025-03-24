@@ -143,9 +143,11 @@
               </el-table-column>
               <el-table-column label="操作" width="180">
                 <template #default="scope">
-                  <el-button size="small" @click="openPreview(scope.row)">预览</el-button>
-                  <el-button size="small" type="primary" @click="downloadFile(scope.row)">下载</el-button>
-                  <el-button size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
+                  <div class="operation-buttons">
+                    <el-button size="small" @click="openPreview(scope.row)">预览</el-button>
+                    <el-button size="small" type="primary" @click="downloadFile(scope.row)">下载</el-button>
+                    <el-button size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
+                  </div>
                 </template>
               </el-table-column>
             </el-table>
@@ -157,27 +159,8 @@
     <!-- 文件预览对话框 -->
     <el-dialog v-model="previewVisible" :title="previewFile?.fileName || '文件预览'" width="80%" destroy-on-close>
       <div class="preview-container">
-        <!-- PDF预览 -->
-        <div v-if="isPdf(previewFile?.fileName)" class="pdf-preview">
-          <iframe :src="previewFile?.url" width="100%" height="600" frameborder="0"></iframe>
-        </div>
-        
-        <!-- 图片预览 -->
-        <div v-else-if="isImage(previewFile?.fileName)" class="image-preview">
-          <el-image :src="previewFile?.url" fit="contain" style="width: 100%; max-height: 600px;"></el-image>
-        </div>
-        
-        <!-- 视频预览 -->
-        <div v-else-if="isVideo(previewFile?.fileName)" class="video-preview">
-          <video controls style="width: 100%; max-height: 600px;">
-            <source :src="previewFile?.url" :type="getVideoType(previewFile?.fileName)">
-            您的浏览器不支持视频播放
-          </video>
-        </div>
-        
-        <!-- 其他文件 -->
-        <div v-else class="other-preview">
-          <el-empty description="无法预览此类型文件，请下载后查看"></el-empty>
+        <div class="unknown-preview">
+          <p>该文件类型暂不支持预览，请下载后查看</p>
         </div>
       </div>
       <template #footer>
@@ -341,14 +324,11 @@ const handleUpload = async () => {
     }
     
     // 使用OSS工具上传文件
-    const result = await uploadFile(file, fileForm.type, (progress) => {
-      uploadProgress.value = Math.floor(progress * 100)
-      console.log('上传进度:', uploadProgress.value)
-    })
+    const result = await uploadFile(file, fileForm.type)
     
     console.log('上传完成，结果:', result)
     
-    if (result.status === 'success') {
+    if (result.success) {
       // 添加到上传历史
       const fileRecord = {
         fileName: file.name,
@@ -366,7 +346,16 @@ const handleUpload = async () => {
       
       lastUploadedFile.value = fileRecord
       uploadStatus.value = 'success'
-      ElMessage.success('上传成功')
+      
+      // 显示成功提示
+      ElMessage({
+        message: `文件 "${file.name}" 上传成功！`,
+        type: 'success',
+        duration: 3000,
+        showClose: true,
+        center: true,
+        customClass: 'upload-success-message'
+      })
       
       // 延迟重置和跳转
       setTimeout(() => {
@@ -380,7 +369,9 @@ const handleUpload = async () => {
     uploadErrorMessage.value = error.message || '上传过程中发生错误'
     ElMessage.error({
       message: `上传失败: ${error.message}`,
-      duration: 5000
+      duration: 5000,
+      showClose: true,
+      center: true
     })
   } finally {
     uploading.value = false
@@ -587,12 +578,9 @@ onMounted(() => {
   align-items: center;
 }
 
-.pdf-preview, .image-preview, .video-preview, .other-preview {
-  width: 100%;
-  min-height: 400px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
+.unknown-preview {
+  color: #909399;
+  font-size: 16px;
 }
 
 .upload-progress {
@@ -616,5 +604,39 @@ onMounted(() => {
   margin-top: 10px;
   display: flex;
   gap: 10px;
+}
+
+/* 添加上传成功消息的样式 */
+:deep(.upload-success-message) {
+  background-color: #f0f9eb;
+  border-color: #e1f3d8;
+  color: #67c23a;
+  font-size: 16px;
+  padding: 15px 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+}
+
+:deep(.upload-success-message .el-message__content) {
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+:deep(.upload-success-message .el-message__icon) {
+  font-size: 20px;
+  margin-right: 10px;
+}
+
+.operation-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-start;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+.operation-buttons .el-button {
+  margin: 0;
+  padding: 6px 12px;
 }
 </style> 
