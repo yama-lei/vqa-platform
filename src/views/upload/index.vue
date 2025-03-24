@@ -1,0 +1,620 @@
+<template>
+  <div class="upload-container">
+    <el-card>
+      <template #header>
+        <div class="card-header">
+          <h3>文件上传</h3>
+        </div>
+      </template>
+      
+      <el-tabs v-model="activeTab">
+        <el-tab-pane label="上传文件" name="file">
+          <div class="upload-area">
+            <el-upload
+              class="upload-dragger"
+              drag
+              action="#"
+              :auto-upload="false"
+              :on-change="handleFileChange"
+              :on-remove="handleFileRemove"
+              :file-list="fileList"
+              multiple
+            >
+              <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+              <div class="el-upload__text">拖拽文件到此处或 <em>点击上传</em></div>
+              <template #tip>
+                <div class="el-upload__tip">
+                  支持的文件类型：PDF、Markdown、代码文件、图片、视频等
+                </div>
+              </template>
+            </el-upload>
+            
+            <div v-if="uploadProgress > 0 && uploadStatus === 'uploading'" class="upload-progress">
+              <el-progress :percentage="uploadProgress" status=""></el-progress>
+              <div class="progress-text">文件上传中...{{ uploadProgress.toFixed(0) }}%</div>
+            </div>
+            
+            <div v-if="uploadStatus === 'success' && lastUploadedFile" class="upload-result success">
+              <el-alert
+                title="上传成功"
+                type="success"
+                show-icon
+                :closable="true"
+                :description="`文件 '${lastUploadedFile.fileName}' 已成功上传`"
+              >
+                <template #default>
+                  <div class="alert-actions">
+                    <el-button size="small" @click="openPreview(lastUploadedFile)">预览文件</el-button>
+                    <el-button size="small" type="primary" @click="downloadFile(lastUploadedFile)">下载文件</el-button>
+                  </div>
+                </template>
+              </el-alert>
+            </div>
+            
+            <div v-if="uploadStatus === 'error'" class="upload-result error">
+              <el-alert
+                title="上传失败"
+                type="error"
+                show-icon
+                :closable="true"
+                :description="uploadErrorMessage"
+              ></el-alert>
+            </div>
+            
+            <div class="file-info" v-if="fileList.length">
+              <el-divider>文件信息</el-divider>
+              
+              <div v-for="(file, index) in fileList" :key="index" class="file-item">
+                <div class="file-name">
+                  <el-icon>
+                    <Document v-if="isDocumentFile(file.name)" />
+                    <Folder v-else-if="isCodeFile(file.name)" />
+                    <Picture v-else-if="isImageFile(file.name)" />
+                    <VideoPlay v-else-if="isVideoFile(file.name)" />
+                    <Files v-else />
+                  </el-icon>
+                  <span>{{ file.name }}</span>
+                </div>
+                <div class="file-size">{{ formatFileSize(file.size) }}</div>
+              </div>
+              
+              <div class="file-form">
+                <el-form label-position="top" :model="fileForm">
+                  <el-form-item label="资源类型">
+                    <el-select v-model="fileForm.type" placeholder="选择资源类型" style="width: 100%">
+                      <el-option label="论文" value="paper" />
+                      <el-option label="代码" value="code" />
+                      <el-option label="笔记" value="note" />
+                      <el-option label="视频" value="video" />
+                      <el-option label="其他" value="other" />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item label="资源描述">
+                    <el-input
+                      v-model="fileForm.description"
+                      type="textarea"
+                      :rows="3"
+                      placeholder="请输入资源描述"
+                    />
+                  </el-form-item>
+                  <el-form-item>
+                    <el-button 
+                      type="primary" 
+                      @click="handleUpload" 
+                      :loading="uploading"
+                      :disabled="uploadStatus === 'uploading'"
+                    >
+                      {{ uploading ? '上传中...' : '上传' }}
+                    </el-button>
+                    <el-button 
+                      @click="resetUpload" 
+                      :disabled="uploading || uploadStatus === 'uploading'"
+                    >
+                      重置
+                    </el-button>
+                  </el-form-item>
+                </el-form>
+              </div>
+            </div>
+          </div>
+        </el-tab-pane>
+        
+        <el-tab-pane label="上传历史" name="history">
+          <div class="upload-history">
+            <el-empty v-if="!uploadHistory.length" description="暂无上传历史"></el-empty>
+            <el-table v-else :data="uploadHistory" style="width: 100%">
+              <el-table-column label="文件名" prop="fileName"></el-table-column>
+              <el-table-column label="资源类型" prop="type" width="120">
+                <template #default="scope">
+                  <el-tag v-if="scope.row.type === 'paper'" type="primary">论文</el-tag>
+                  <el-tag v-if="scope.row.type === 'code'" type="success">代码</el-tag>
+                  <el-tag v-if="scope.row.type === 'note'" type="warning">笔记</el-tag>
+                  <el-tag v-if="scope.row.type === 'video'" type="danger">视频</el-tag>
+                  <el-tag v-if="scope.row.type === 'other'" type="info">其他</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="上传时间" prop="uploadTime" width="180"></el-table-column>
+              <el-table-column label="状态" prop="status" width="120">
+                <template #default="scope">
+                  <el-tag :type="scope.row.status === 'success' ? 'success' : 'danger'">
+                    {{ scope.row.status === 'success' ? '成功' : '失败' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="180">
+                <template #default="scope">
+                  <el-button size="small" @click="openPreview(scope.row)">预览</el-button>
+                  <el-button size="small" type="primary" @click="downloadFile(scope.row)">下载</el-button>
+                  <el-button size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </el-tab-pane>
+      </el-tabs>
+    </el-card>
+    
+    <!-- 文件预览对话框 -->
+    <el-dialog v-model="previewVisible" :title="previewFile?.fileName || '文件预览'" width="80%" destroy-on-close>
+      <div class="preview-container">
+        <!-- PDF预览 -->
+        <div v-if="isPdf(previewFile?.fileName)" class="pdf-preview">
+          <iframe :src="previewFile?.url" width="100%" height="600" frameborder="0"></iframe>
+        </div>
+        
+        <!-- 图片预览 -->
+        <div v-else-if="isImage(previewFile?.fileName)" class="image-preview">
+          <el-image :src="previewFile?.url" fit="contain" style="width: 100%; max-height: 600px;"></el-image>
+        </div>
+        
+        <!-- 视频预览 -->
+        <div v-else-if="isVideo(previewFile?.fileName)" class="video-preview">
+          <video controls style="width: 100%; max-height: 600px;">
+            <source :src="previewFile?.url" :type="getVideoType(previewFile?.fileName)">
+            您的浏览器不支持视频播放
+          </video>
+        </div>
+        
+        <!-- 其他文件 -->
+        <div v-else class="other-preview">
+          <el-empty description="无法预览此类型文件，请下载后查看"></el-empty>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="previewVisible = false">关闭</el-button>
+        <el-button type="primary" @click="downloadFile(previewFile)">下载</el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<script setup>
+import { ref, reactive, onMounted } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { 
+  UploadFilled, 
+  Document, 
+  Folder, 
+  Picture, 
+  VideoPlay, 
+  Files 
+} from '@element-plus/icons-vue'
+import { 
+  uploadFile, 
+  downloadFile as ossDownload, 
+  deleteFile, 
+  listFiles,
+  testOssConnection
+} from '../../utils/oss'
+
+const activeTab = ref('file')
+const fileList = ref([])
+const uploading = ref(false)
+const previewVisible = ref(false)
+const previewFile = ref(null)
+const uploadProgress = ref(0)
+const uploadStatus = ref('')
+const uploadErrorMessage = ref('')
+const lastUploadedFile = ref(null)
+
+// 文件表单
+const fileForm = reactive({
+  type: '',
+  description: ''
+})
+
+// 上传历史，实际项目中应该从后端获取或本地存储
+const uploadHistory = ref([])
+
+// 处理文件变化
+const handleFileChange = (uploadFile) => {
+  console.log('文件变化:', uploadFile)
+  // 将文件添加到文件列表
+  fileList.value = [uploadFile] // 如果要支持多文件，可以用push
+  
+  // 自动判断文件类型并设置
+  fileForm.type = determineFileType(uploadFile.name)
+}
+
+// 处理文件移除
+const handleFileRemove = (uploadFile) => {
+  console.log('文件移除:', uploadFile)
+}
+
+// 判断文件类型
+const isDocumentFile = (fileName) => {
+  return /\.(pdf|doc|docx|txt)$/i.test(fileName)
+}
+
+const isCodeFile = (fileName) => {
+  return /\.(py|js|java|c|cpp|h|html|css|json|xml)$/i.test(fileName)
+}
+
+const isImageFile = (fileName) => {
+  return /\.(jpg|jpeg|png|gif|svg|webp)$/i.test(fileName)
+}
+
+const isVideoFile = (fileName) => {
+  return /\.(mp4|avi|mov|wmv|flv|mkv|webm)$/i.test(fileName)
+}
+
+// 预览相关检查函数
+const isPdf = (fileName) => {
+  return /\.pdf$/i.test(fileName || '')
+}
+
+const isImage = (fileName) => {
+  return /\.(jpg|jpeg|png|gif|svg|webp)$/i.test(fileName || '')
+}
+
+const isVideo = (fileName) => {
+  return /\.(mp4|avi|mov|wmv|flv|mkv|webm)$/i.test(fileName || '')
+}
+
+const getVideoType = (fileName) => {
+  if (!fileName) return 'video/mp4'
+  
+  const extension = fileName.split('.').pop().toLowerCase()
+  switch (extension) {
+    case 'mp4': return 'video/mp4'
+    case 'webm': return 'video/webm'
+    case 'ogg': return 'video/ogg'
+    default: return 'video/mp4'
+  }
+}
+
+// 格式化文件大小
+const formatFileSize = (size) => {
+  if (size < 1024) {
+    return size + ' B'
+  } else if (size < 1024 * 1024) {
+    return (size / 1024).toFixed(2) + ' KB'
+  } else if (size < 1024 * 1024 * 1024) {
+    return (size / (1024 * 1024)).toFixed(2) + ' MB'
+  } else {
+    return (size / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
+  }
+}
+
+// 添加determineFileType函数
+const determineFileType = (fileName) => {
+  const extension = fileName.split('.').pop().toLowerCase()
+  
+  if (['pdf', 'doc', 'docx'].includes(extension)) {
+    return 'paper'
+  } else if (['md', 'txt'].includes(extension)) {
+    return 'note'
+  } else if (['mp4', 'avi', 'mov', 'webm'].includes(extension)) {
+    return 'video'
+  } else if (['zip', 'rar', 'tar', 'gz', 'py', 'js', 'java', 'c', 'cpp'].includes(extension)) {
+    return 'code'
+  } else {
+    return 'other'
+  }
+}
+
+// 处理上传
+const handleUpload = async () => {
+  if (!fileList.value.length) {
+    ElMessage.warning('请选择要上传的文件')
+    return
+  }
+  
+  if (!fileForm.type) {
+    ElMessage.warning('请选择资源类型')
+    return
+  }
+  
+  uploading.value = true
+  uploadProgress.value = 0
+  uploadStatus.value = 'uploading'
+  uploadErrorMessage.value = ''
+  
+  const file = fileList.value[0].raw
+  console.log('开始上传文件:', file.name)
+  
+  try {
+    // 对于大文件，先检查是否超过限制
+    const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB
+    if (file.size > MAX_FILE_SIZE) {
+      throw new Error('文件大小超过100MB限制，请选择更小的文件')
+    }
+    
+    // 使用OSS工具上传文件
+    const result = await uploadFile(file, fileForm.type, (progress) => {
+      uploadProgress.value = Math.floor(progress * 100)
+      console.log('上传进度:', uploadProgress.value)
+    })
+    
+    console.log('上传完成，结果:', result)
+    
+    if (result.status === 'success') {
+      // 添加到上传历史
+      const fileRecord = {
+        fileName: file.name,
+        objectName: result.objectName,
+        type: fileForm.type,
+        description: fileForm.description,
+        uploadTime: new Date().toLocaleString(),
+        status: 'success',
+        url: result.url
+      }
+      
+      // 更新上传历史
+      uploadHistory.value.unshift(fileRecord)
+      localStorage.setItem('uploadHistory', JSON.stringify(uploadHistory.value))
+      
+      lastUploadedFile.value = fileRecord
+      uploadStatus.value = 'success'
+      ElMessage.success('上传成功')
+      
+      // 延迟重置和跳转
+      setTimeout(() => {
+        resetUpload()
+        activeTab.value = 'history'
+      }, 3000)
+    }
+  } catch (error) {
+    console.error('上传失败:', error)
+    uploadStatus.value = 'error'
+    uploadErrorMessage.value = error.message || '上传过程中发生错误'
+    ElMessage.error({
+      message: `上传失败: ${error.message}`,
+      duration: 5000
+    })
+  } finally {
+    uploading.value = false
+  }
+}
+
+// 重置上传
+const resetUpload = () => {
+  fileList.value = []
+  fileForm.type = ''
+  fileForm.description = ''
+}
+
+// 预览文件
+const openPreview = (file) => {
+  previewFile.value = file
+  previewVisible.value = true
+}
+
+// 下载文件
+const downloadFile = (file) => {
+  if (!file || !file.objectName) {
+    ElMessage.warning('文件信息不完整，无法下载')
+    return
+  }
+  
+  try {
+    ossDownload(file.objectName, file.fileName)
+    ElMessage.success('下载已开始')
+  } catch (error) {
+    console.error('下载失败:', error)
+    ElMessage.error(`下载失败: ${error.message}`)
+  }
+}
+
+// 删除文件
+const handleDelete = (file) => {
+  ElMessageBox.confirm(
+    `确定要删除文件 "${file.fileName}" 吗？此操作无法撤销。`,
+    '删除确认',
+    {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    }
+  ).then(async () => {
+    try {
+      await deleteFile(file.objectName)
+      
+      // 从历史记录中移除
+      uploadHistory.value = uploadHistory.value.filter(item => item.objectName !== file.objectName)
+      
+      // 保存更新后的历史
+      saveUploadHistory()
+      
+      ElMessage.success('文件已删除')
+    } catch (error) {
+      console.error('删除文件失败:', error)
+      ElMessage.error(`删除文件失败: ${error.message}`)
+    }
+  }).catch(() => {})
+}
+
+// 保存上传历史到本地存储
+const saveUploadHistory = () => {
+  localStorage.setItem('uploadHistory', JSON.stringify(uploadHistory.value))
+}
+
+// 从本地存储加载上传历史
+const loadUploadHistory = () => {
+  const history = localStorage.getItem('uploadHistory')
+  if (history) {
+    uploadHistory.value = JSON.parse(history)
+  }
+}
+
+// 检测OSS连接
+const checkOssConnection = async () => {
+  try {
+    console.log('正在检测OSS连接...');
+    await testOssConnection();
+    console.log('OSS连接正常');
+    
+    // 连接成功，尝试获取文件列表
+    try {
+      const files = await listFiles('', 5);
+      console.log('成功获取文件列表，数量:', files.length);
+    } catch (listError) {
+      console.warn('获取文件列表失败，可能是权限问题:', listError);
+    }
+  } catch (error) {
+    console.error('OSS连接失败:', error);
+    uploadStatus.value = 'error';
+    
+    // 根据错误类型提供更具体的提示
+    let errorDetail = '';
+    if (error.name === 'SecurityError') {
+      errorDetail = '这可能是由于浏览器安全限制或跨域问题导致的。';
+    } else if (error.message && error.message.includes('Network')) {
+      errorDetail = '这可能是网络连接问题。请检查您的网络连接并确保能够访问阿里云OSS服务。';
+    } else if (error.message && error.message.includes('AccessDenied')) {
+      errorDetail = '这可能是由于AccessKey权限不足或Bucket权限设置错误导致的。';
+    } else if (error.status === 403) {
+      errorDetail = '访问被拒绝，请检查您的AccessKey是否有效且具有足够的权限。';
+    } else if (error.status === 404) {
+      errorDetail = 'Bucket不存在或者路径错误。请检查您的Bucket名称是否正确。';
+    }
+    
+    const troubleshootGuide = `
+OSS连接排查指南：
+1. 检查AccessKey是否正确
+2. 确认Bucket名称和区域设置
+3. 验证网络连接状态
+4. 检查阿里云控制台中的权限设置
+5. 考虑使用STS Token进行安全访问
+    `;
+    
+    uploadErrorMessage.value = `OSS连接失败: ${error.message || '未知错误'}。${errorDetail}\n${troubleshootGuide}`;
+    
+    ElMessage.error({
+      message: '检测到OSS连接问题，上传功能可能无法正常工作',
+      duration: 10000
+    });
+  }
+};
+
+// 组件挂载时加载历史记录
+onMounted(() => {
+  loadUploadHistory();
+  
+  // 测试OSS连接
+  checkOssConnection();
+  
+  // 可以选择从OSS获取文件列表，实现历史同步
+  // listFiles().then(files => {
+  //   // 处理文件列表
+  // }).catch(error => {
+  //   console.error('获取文件列表失败:', error)
+  // })
+})
+</script>
+
+<style scoped>
+.upload-container {
+  min-height: 600px;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-header h3 {
+  margin: 0;
+}
+
+.upload-area {
+  min-height: 400px;
+}
+
+.upload-dragger {
+  width: 100%;
+}
+
+.file-info {
+  margin-top: 20px;
+}
+
+.file-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.file-name {
+  display: flex;
+  align-items: center;
+}
+
+.file-name .el-icon {
+  margin-right: 5px;
+}
+
+.file-size {
+  color: #909399;
+}
+
+.file-form {
+  margin-top: 20px;
+  max-width: 500px;
+}
+
+.upload-history {
+  min-height: 400px;
+}
+
+.preview-container {
+  min-height: 400px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.pdf-preview, .image-preview, .video-preview, .other-preview {
+  width: 100%;
+  min-height: 400px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.upload-progress {
+  margin-top: 20px;
+  margin-bottom: 20px;
+}
+
+.progress-text {
+  text-align: center;
+  margin-top: 8px;
+  color: #409eff;
+  font-size: 14px;
+}
+
+.upload-result {
+  margin-top: 15px;
+  margin-bottom: 15px;
+}
+
+.alert-actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+}
+</style> 
