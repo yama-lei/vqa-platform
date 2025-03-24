@@ -299,9 +299,8 @@ onMounted(async () => {
   
   // 获取OSS配置
   ossConfig.value = {
-    region: 'oss-cn-nanjing',
-    bucket: 'vqaplatform',
-    accessKeyId: 'LTAI5tReDFUSL6VJgTseWiGy'.substring(0, 3) + '***' + 'LTAI5tReDFUSL6VJgTseWiGy'.substring('LTAI5tReDFUSL6VJgTseWiGy'.length - 3),
+    region: import.meta.env.VITE_OSS_REGION,
+    bucket: import.meta.env.VITE_OSS_BUCKET
   }
 })
 

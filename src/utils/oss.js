@@ -8,8 +8,8 @@ console.log('环境变量检查:', {
 
 // OSS客户端配置
 const ossConfig = {
-  region: 'oss-cn-nanjing',
-  bucket: 'vqaplatform',
+  region: import.meta.env.VITE_OSS_REGION,
+  bucket: import.meta.env.VITE_OSS_BUCKET,
   accessKeyId: import.meta.env.VITE_OSS_ACCESS_KEY_ID,
   accessKeySecret: import.meta.env.VITE_OSS_ACCESS_KEY_SECRET,
   secure: true // 强制使用 HTTPS
