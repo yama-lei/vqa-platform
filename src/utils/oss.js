@@ -2,33 +2,86 @@ import OSS from 'ali-oss'
 
 // 添加调试日志
 console.log('环境变量检查:', {
-  VITE_OSS_ACCESS_KEY_ID: import.meta.env.VITE_OSS_ACCESS_KEY_ID,
-  VITE_OSS_ACCESS_KEY_SECRET: import.meta.env.VITE_OSS_ACCESS_KEY_SECRET ? '已设置' : '未设置'
+  API_KEY: import.meta.env.VITE_API_KEY ? '已设置' : '未设置'
 })
 
-// OSS客户端配置
-const ossConfig = {
-  region: import.meta.env.VITE_OSS_REGION,
-  bucket: import.meta.env.VITE_OSS_BUCKET,
-  accessKeyId: import.meta.env.VITE_OSS_ACCESS_KEY_ID,
-  accessKeySecret: import.meta.env.VITE_OSS_ACCESS_KEY_SECRET,
-  secure: true // 强制使用 HTTPS
+// 基础配置
+const API_ENDPOINT = 'https://api.yama-lei.top/api/oss/config';
+const API_KEY = import.meta.env.VITE_API_KEY || 'lIlI****';
+
+// 调试信息
+console.log('API配置:', {
+  endpoint: API_ENDPOINT,
+  apiKey: API_KEY ? '已设置' : '未设置'
+});
+
+/**
+ * 获取 OSS 客户端配置
+ * @returns {Promise<Object>} OSS 配置
+ */
+const getOssConfig = async () => {
+  try {
+    console.log('正在请求OSS配置...');
+    const response = await fetch(API_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': API_KEY
+      }
+    });
+    
+    console.log('API响应状态:', response.status, response.statusText);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('API响应错误:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: errorText
+      });
+      throw new Error(`获取OSS配置失败: HTTP ${response.status}`);
+    }
+    
+    const result = await response.json();
+    console.log('API响应数据:', result);
+    
+    if (!result.success) {
+      throw new Error(result.error || '获取OSS配置失败');
+    }
+    
+    return {
+      region: result.data.region,
+      bucket: result.data.bucket,
+      accessKeyId: result.data.accessKeyId,
+      accessKeySecret: result.data.accessKeySecret,
+      secure: true
+    };
+  } catch (error) {
+    console.error('获取OSS配置失败:', error);
+    
+    // 开发环境下，使用临时配置
+    if (import.meta.env.DEV) {
+      console.warn('开发环境下使用临时配置');
+      return {
+        region: import.meta.env.VITE_OSS_REGION || 'oss-cn-nanjing',
+        bucket: import.meta.env.VITE_OSS_BUCKET || 'vqaplatform',
+        accessKeyId: import.meta.env.VITE_OSS_ACCESS_KEY_ID || '',
+        accessKeySecret: import.meta.env.VITE_OSS_ACCESS_KEY_SECRET || '',
+        secure: true
+      };
+    }
+    
+    throw error;
+  }
 }
-
-// 添加配置检查日志
-console.log('OSS配置:', {
-  region: ossConfig.region,
-  bucket: ossConfig.bucket,
-  accessKeyId: ossConfig.accessKeyId ? '已设置' : '未设置',
-  accessKeySecret: ossConfig.accessKeySecret ? '已设置' : '未设置'
-})
 
 /**
  * 创建OSS客户端
- * @returns {OSS} OSS客户端实例
+ * @returns {Promise<OSS>} OSS客户端实例
  */
-export const createOssClient = () => {
-  return new OSS(ossConfig)
+export const createOssClient = async () => {
+  const config = await getOssConfig();
+  return new OSS(config);
 }
 
 /**
@@ -40,7 +93,7 @@ export const createOssClient = () => {
  */
 export const getSignedUrl = async (objectName, operation = 'get', expires = 3600) => {
   try {
-    const client = createOssClient()
+    const client = await createOssClient()
     
     // 添加详细的日志
     console.log('原始objectName:', objectName)
@@ -160,7 +213,7 @@ export const getSignedUrl = async (objectName, operation = 'get', expires = 3600
  */
 export const uploadFile = async (file, directory = '') => {
   try {
-    const client = createOssClient()
+    const client = await createOssClient()
     
     // 如果用户指定了目录，使用用户指定的目录
     // 否则使用默认的other目录
@@ -243,8 +296,8 @@ const getContentType = (fileName) => {
  * @returns {Promise<Array>} 文件列表，每个文件包含签名URL
  */
 export const listFiles = async (directory = '', maxKeys = 100) => {
-  const client = createOssClient()
   try {
+    const client = await createOssClient()
     console.log('正在获取目录列表:', directory)
     
     // 如果没有指定目录，则获取所有类型的文件
@@ -295,8 +348,8 @@ export const listFiles = async (directory = '', maxKeys = 100) => {
  * @returns {Promise<Boolean>} 是否删除成功
  */
 export const deleteFile = async (objectName) => {
-  const client = createOssClient()
   try {
+    const client = await createOssClient()
     await client.delete(objectName)
     return true
   } catch (error) {
@@ -326,27 +379,16 @@ export const downloadFile = (objectName, fileName) => {
  */
 export const testOssConnection = async () => {
   try {
-    console.log('开始测试OSS连接...');
-    console.log('OSS配置:', {
-      region: ossConfig.region,
-      bucket: ossConfig.bucket,
-      accessKeyId: ossConfig.accessKeyId.substring(0, 3) + '***' + ossConfig.accessKeyId.substring(ossConfig.accessKeyId.length - 3),
-    });
-    
-    const client = createOssClient();
-    
-    // 使用list方法替代getBucketInfo来测试连接，因为getBucketInfo方法不存在
-    console.log('注意: 当前使用的是AccessKey直接访问方式，生产环境建议使用STS Token，详见：https://help.aliyun.com/document_detail/32077.html');
-    const result = await client.list({
-      'max-keys': 1
-    });
-    console.log('OSS连接成功, 获取到列表:', result);
-    return true;
+    console.log('开始测试OSS连接...')
+    const client = await createOssClient()
+    const result = await client.list({ 'max-keys': 1 })
+    console.log('OSS连接成功')
+    return true
   } catch (error) {
-    console.error('OSS连接测试失败:', error);
-    throw error;
+    console.error('OSS连接测试失败:', error)
+    throw error
   }
-};
+}
 
 export default {
   createOssClient,

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>API 测试</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+  <h1>API 测试</h1>
+  <button onclick="testApi()">测试 API</button>
+  <pre id="result"></pre>
+
+  <script>
+    async function testApi() {
+      const resultEl = document.getElementById('result');
+      resultEl.textContent = '正在请求...';
+      
+      try {
+        const response = await fetch('https://api.yama-lei.top/api/oss/config', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': 'lIlI****'
+          }
+        });
+        
+        resultEl.textContent += `\n状态码: ${response.status} ${response.statusText}`;
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          resultEl.textContent += `\n错误: ${errorText}`;
+          return;
+        }
+        
+        const data = await response.json();
+        resultEl.textContent += `\n数据: ${JSON.stringify(data, null, 2)}`;
+      } catch (error) {
+        resultEl.textContent += `\n请求失败: ${error.message}`;
+      }
+    }
+  </script>
+</body>
+</html> 

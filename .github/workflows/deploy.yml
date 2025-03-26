@@ -29,10 +29,7 @@ jobs:
         run: npm run build
         env:
           NODE_OPTIONS: '--max_old_space_size=4096'
-          VITE_OSS_REGION: ${{ secrets.VITE_OSS_REGION }}
-          VITE_OSS_BUCKET: ${{ secrets.VITE_OSS_BUCKET }}
-          VITE_OSS_ACCESS_KEY_ID: ${{ secrets.VITE_OSS_ACCESS_KEY_ID }}
-          VITE_OSS_ACCESS_KEY_SECRET: ${{ secrets.VITE_OSS_ACCESS_KEY_SECRET }}
+          VITE_API_KEY: lIlI****
 
       - name: Prepare for deployment
         run: |
