@@ -1,9 +1,7 @@
 <template>
   <div class="layout-container">
     <el-container>
-      <el-header height="60px">
-        <header-component />
-      </el-header>
+
       <el-container>
         <el-aside width="220px">
           <sidebar-component />

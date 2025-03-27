@@ -1,171 +1,256 @@
 <template>
   <div class="upload-container">
-    <el-card>
-      <template #header>
-        <div class="card-header">
-          <h3>文件上传</h3>
-        </div>
-      </template>
-      
-      <el-tabs v-model="activeTab">
-        <el-tab-pane label="上传文件" name="file">
-          <div class="upload-area">
-            <el-upload
-              class="upload-dragger"
-              drag
-              action="#"
-              :auto-upload="false"
-              :on-change="handleFileChange"
-              :on-remove="handleFileRemove"
-              :file-list="fileList"
-              multiple
-            >
-              <el-icon class="el-icon--upload"><upload-filled /></el-icon>
-              <div class="el-upload__text">拖拽文件到此处或 <em>点击上传</em></div>
-              <template #tip>
-                <div class="el-upload__tip">
-                  支持的文件类型：PDF、Markdown、代码文件、图片、视频等
-                </div>
-              </template>
-            </el-upload>
-            
-            <div v-if="uploadProgress > 0 && uploadStatus === 'uploading'" class="upload-progress">
-              <el-progress :percentage="uploadProgress" status=""></el-progress>
-              <div class="progress-text">文件上传中...{{ uploadProgress.toFixed(0) }}%</div>
-            </div>
-            
-            <div v-if="uploadStatus === 'success' && lastUploadedFile" class="upload-result success">
-              <el-alert
-                title="上传成功"
-                type="success"
-                show-icon
-                :closable="true"
-                :description="`文件 '${lastUploadedFile.fileName}' 已成功上传`"
+    <!-- 顶部标题区域 -->
+    <div class="page-header">
+      <h1>文件上传</h1>
+      <p class="header-subtitle">上传分享您的学习资料、论文、代码和笔记</p>
+    </div>
+    
+    <!-- 主内容区域 -->
+    <div class="content-section">
+      <div class="tabs-container">
+        <el-tabs v-model="activeTab" class="custom-tabs">
+          <el-tab-pane label="上传文件" name="file">
+            <div class="upload-area">
+              <el-upload
+                class="upload-dragger"
+                drag
+                action="#"
+                :auto-upload="false"
+                :on-change="handleFileChange"
+                :on-remove="handleFileRemove"
+                :file-list="fileList"
+                multiple
               >
-                <template #default>
-                  <div class="alert-actions">
-                    <el-button size="small" @click="openPreview(lastUploadedFile)">预览文件</el-button>
-                    <el-button size="small" type="primary" @click="downloadFile(lastUploadedFile)">下载文件</el-button>
-                  </div>
-                </template>
-              </el-alert>
-            </div>
-            
-            <div v-if="uploadStatus === 'error'" class="upload-result error">
-              <el-alert
-                title="上传失败"
-                type="error"
-                show-icon
-                :closable="true"
-                :description="uploadErrorMessage"
-              ></el-alert>
-            </div>
-            
-            <div class="file-info" v-if="fileList.length">
-              <el-divider>文件信息</el-divider>
-              
-              <div v-for="(file, index) in fileList" :key="index" class="file-item">
-                <div class="file-name">
-                  <el-icon>
-                    <Document v-if="isDocumentFile(file.name)" />
-                    <Folder v-else-if="isCodeFile(file.name)" />
-                    <Picture v-else-if="isImageFile(file.name)" />
-                    <VideoPlay v-else-if="isVideoFile(file.name)" />
-                    <Files v-else />
-                  </el-icon>
-                  <span>{{ file.name }}</span>
+                <div class="upload-icon-container">
+                  <el-icon class="el-icon--upload"><upload-filled /></el-icon>
                 </div>
-                <div class="file-size">{{ formatFileSize(file.size) }}</div>
-              </div>
-              
-              <div class="file-form">
-                <el-form label-position="top" :model="fileForm">
-                  <el-form-item label="资源类型">
-                    <el-select v-model="fileForm.type" placeholder="选择资源类型" style="width: 100%">
-                      <el-option label="论文" value="paper" />
-                      <el-option label="代码" value="code" />
-                      <el-option label="笔记" value="note" />
-                      <el-option label="视频" value="video" />
-                      <el-option label="其他" value="other" />
-                    </el-select>
-                  </el-form-item>
-                  <el-form-item label="资源描述">
-                    <el-input
-                      v-model="fileForm.description"
-                      type="textarea"
-                      :rows="3"
-                      placeholder="请输入资源描述"
-                    />
-                  </el-form-item>
-                  <el-form-item>
-                    <el-button 
-                      type="primary" 
-                      @click="handleUpload" 
-                      :loading="uploading"
-                      :disabled="uploadStatus === 'uploading'"
-                    >
-                      {{ uploading ? '上传中...' : '上传' }}
-                    </el-button>
-                    <el-button 
-                      @click="resetUpload" 
-                      :disabled="uploading || uploadStatus === 'uploading'"
-                    >
-                      重置
-                    </el-button>
-                  </el-form-item>
-                </el-form>
-              </div>
-            </div>
-          </div>
-        </el-tab-pane>
-        
-        <el-tab-pane label="上传历史" name="history">
-          <div class="upload-history">
-            <el-empty v-if="!uploadHistory.length" description="暂无上传历史"></el-empty>
-            <el-table v-else :data="uploadHistory" style="width: 100%">
-              <el-table-column label="文件名" prop="fileName"></el-table-column>
-              <el-table-column label="资源类型" prop="type" width="120">
-                <template #default="scope">
-                  <el-tag v-if="scope.row.type === 'paper'" type="primary">论文</el-tag>
-                  <el-tag v-if="scope.row.type === 'code'" type="success">代码</el-tag>
-                  <el-tag v-if="scope.row.type === 'note'" type="warning">笔记</el-tag>
-                  <el-tag v-if="scope.row.type === 'video'" type="danger">视频</el-tag>
-                  <el-tag v-if="scope.row.type === 'other'" type="info">其他</el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column label="上传时间" prop="uploadTime" width="180"></el-table-column>
-              <el-table-column label="状态" prop="status" width="120">
-                <template #default="scope">
-                  <el-tag :type="scope.row.status === 'success' ? 'success' : 'danger'">
-                    {{ scope.row.status === 'success' ? '成功' : '失败' }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column label="操作" width="180">
-                <template #default="scope">
-                  <div class="operation-buttons">
-                    <el-button size="small" @click="openPreview(scope.row)">预览</el-button>
-                    <el-button size="small" type="primary" @click="downloadFile(scope.row)">下载</el-button>
-                    <el-button size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
+                <div class="el-upload__text">拖拽文件到此处或 <em>点击上传</em></div>
+                <template #tip>
+                  <div class="el-upload__tip">
+                    支持的文件类型：PDF、Markdown、代码文件、图片、视频等
                   </div>
                 </template>
-              </el-table-column>
-            </el-table>
-          </div>
-        </el-tab-pane>
-      </el-tabs>
-    </el-card>
+              </el-upload>
+              
+              <div v-if="uploadProgress > 0 && uploadStatus === 'uploading'" class="upload-progress">
+                <el-progress :percentage="uploadProgress" :stroke-width="10" status=""></el-progress>
+                <div class="progress-text">文件上传中...{{ uploadProgress.toFixed(0) }}%</div>
+              </div>
+              
+              <div v-if="uploadStatus === 'success' && lastUploadedFile" class="upload-result success">
+                <el-alert
+                  title="上传成功"
+                  type="success"
+                  show-icon
+                  :closable="true"
+                  :description="`文件 '${lastUploadedFile.fileName}' 已成功上传`"
+                >
+                  <template #default>
+                    <div class="alert-actions">
+                      <el-button size="small" @click="openPreview(lastUploadedFile)" class="preview-btn">
+                        <el-icon><View /></el-icon>预览文件
+                      </el-button>
+                      <el-button size="small" type="primary" @click="downloadFile(lastUploadedFile)" class="download-btn">
+                        <el-icon><Download /></el-icon>下载文件
+                      </el-button>
+                    </div>
+                  </template>
+                </el-alert>
+              </div>
+              
+              <div v-if="uploadStatus === 'error'" class="upload-result error">
+                <el-alert
+                  title="上传失败"
+                  type="error"
+                  show-icon
+                  :closable="true"
+                  :description="uploadErrorMessage"
+                ></el-alert>
+              </div>
+              
+              <div class="file-info" v-if="fileList.length">
+                <el-divider content-position="center">文件信息</el-divider>
+                
+                <div class="file-items-container">
+                  <div v-for="(file, index) in fileList" :key="index" class="file-item">
+                    <div class="file-name">
+                      <el-icon class="file-type-icon">
+                        <Document v-if="isDocumentFile(file.name)" />
+                        <Folder v-else-if="isCodeFile(file.name)" />
+                        <Picture v-else-if="isImageFile(file.name)" />
+                        <VideoPlay v-else-if="isVideoFile(file.name)" />
+                        <Files v-else />
+                      </el-icon>
+                      <span>{{ file.name }}</span>
+                    </div>
+                    <div class="file-size">{{ formatFileSize(file.size) }}</div>
+                  </div>
+                </div>
+                
+                <div class="file-form">
+                  <el-form label-position="top" :model="fileForm">
+                    <el-form-item label="资源类型">
+                      <el-select v-model="fileForm.type" placeholder="选择资源类型" style="width: 100%">
+                        <el-option label="论文" value="paper" />
+                        <el-option label="代码" value="code" />
+                        <el-option label="笔记" value="note" />
+                        <el-option label="视频" value="video" />
+                        <el-option label="其他" value="other" />
+                      </el-select>
+                    </el-form-item>
+                    <el-form-item label="资源描述">
+                      <el-input
+                        v-model="fileForm.description"
+                        type="textarea"
+                        :rows="3"
+                        placeholder="这一功能暂时没有开发，即使写了描述也没用"
+                      />
+                    </el-form-item>
+                    <el-form-item>
+                      <div class="form-buttons">
+                        <el-button 
+                          type="primary" 
+                          @click="handleUpload" 
+                          :loading="uploading"
+                          :disabled="uploadStatus === 'uploading'"
+                          class="upload-button"
+                        >
+                          <el-icon v-if="!uploading"><Upload /></el-icon>
+                          {{ uploading ? '上传中...' : '上传文件' }}
+                        </el-button>
+                        <el-button 
+                          @click="resetUpload" 
+                          :disabled="uploading || uploadStatus === 'uploading'"
+                          class="reset-button"
+                        >
+                          <el-icon><RefreshRight /></el-icon>重置
+                        </el-button>
+                      </div>
+                    </el-form-item>
+                  </el-form>
+                </div>
+              </div>
+            </div>
+          </el-tab-pane>
+          
+          <el-tab-pane label="上传历史" name="history">
+            <div class="upload-history">
+              <el-empty v-if="!uploadHistory.length" description="暂无上传历史" class="empty-history">
+                <template #image>
+                  <el-icon class="empty-icon"><Document /></el-icon>
+                </template>
+                <template #description>
+                  <p>您还没有上传过任何文件</p>
+                </template>
+              </el-empty>
+              
+              <el-table 
+                v-else 
+                :data="uploadHistory" 
+                style="width: 100%"
+                class="history-table"
+              >
+                <el-table-column label="文件名" prop="fileName">
+                  <template #default="scope">
+                    <div class="file-name-cell">
+                      <el-icon class="file-icon">
+                        <Document v-if="scope.row.type === 'paper' || scope.row.type === 'note'" />
+                        <Folder v-if="scope.row.type === 'code'" />
+                        <VideoPlay v-if="scope.row.type === 'video'" />
+                        <Files v-if="scope.row.type === 'other'" />
+                      </el-icon>
+                      <span>{{ scope.row.fileName }}</span>
+                    </div>
+                  </template>
+                </el-table-column>
+                <el-table-column label="资源类型" prop="type" width="120">
+                  <template #default="scope">
+                    <el-tag 
+                      v-if="scope.row.type === 'paper'" 
+                      type="primary" 
+                      effect="light"
+                      class="resource-tag"
+                    >论文</el-tag>
+                    <el-tag 
+                      v-if="scope.row.type === 'code'" 
+                      type="success" 
+                      effect="light"
+                      class="resource-tag"
+                    >代码</el-tag>
+                    <el-tag 
+                      v-if="scope.row.type === 'note'" 
+                      type="warning" 
+                      effect="light"
+                      class="resource-tag"
+                    >笔记</el-tag>
+                    <el-tag 
+                      v-if="scope.row.type === 'video'" 
+                      type="danger" 
+                      effect="light"
+                      class="resource-tag"
+                    >视频</el-tag>
+                    <el-tag 
+                      v-if="scope.row.type === 'other'" 
+                      type="info" 
+                      effect="light"
+                      class="resource-tag"
+                    >其他</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="上传时间" prop="uploadTime" width="180"></el-table-column>
+                <el-table-column label="状态" prop="status" width="120">
+                  <template #default="scope">
+                    <el-tag 
+                      :type="scope.row.status === 'success' ? 'success' : 'danger'"
+                      effect="light"
+                      class="status-tag"
+                    >
+                      {{ scope.row.status === 'success' ? '成功' : '失败' }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="操作" width="200">
+                  <template #default="scope">
+                    <div class="operation-buttons">
+                      <el-button size="small" @click="openPreview(scope.row)" class="action-btn preview-btn">
+                        <el-icon><View /></el-icon>预览
+                      </el-button>
+                      <el-button size="small" type="primary" @click="downloadFile(scope.row)" class="action-btn download-btn">
+                        <el-icon><Download /></el-icon>下载
+                      </el-button>
+                      <el-button size="small" type="danger" @click="handleDelete(scope.row)" class="action-btn delete-btn">
+                        <el-icon><Delete /></el-icon>删除
+                      </el-button>
+                    </div>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
+          </el-tab-pane>
+        </el-tabs>
+      </div>
+    </div>
     
     <!-- 文件预览对话框 -->
-    <el-dialog v-model="previewVisible" :title="previewFile?.fileName || '文件预览'" width="80%" destroy-on-close>
+    <el-dialog 
+      v-model="previewVisible" 
+      :title="previewFile?.fileName || '文件预览'" 
+      width="80%" 
+      destroy-on-close
+      class="preview-dialog"
+    >
       <div class="preview-container">
         <div class="unknown-preview">
+          <el-icon class="preview-icon"><Document /></el-icon>
           <p>该文件类型暂不支持预览，请下载后查看</p>
         </div>
       </div>
       <template #footer>
         <el-button @click="previewVisible = false">关闭</el-button>
-        <el-button type="primary" @click="downloadFile(previewFile)">下载</el-button>
+        <el-button type="primary" @click="downloadFile(previewFile)" class="download-preview-btn">
+          <el-icon><Download /></el-icon>下载
+        </el-button>
       </template>
     </el-dialog>
   </div>
@@ -180,7 +265,12 @@ import {
   Folder, 
   Picture, 
   VideoPlay, 
-  Files 
+  Files,
+  View,
+  Download,
+  Delete,
+  RefreshRight,
+  Upload
 } from '@element-plus/icons-vue'
 import { 
   uploadFile, 
@@ -516,59 +606,306 @@ onMounted(() => {
 
 <style scoped>
 .upload-container {
-  min-height: 600px;
+  min-height: 100vh;
+  background-color: #f9fafc;
 }
 
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+/* 顶部标题区域 */
+.page-header {
+  background: linear-gradient(135deg, #3a8ee6 0%, #5b48d0 100%);
+  color: white;
+  padding: 30px 20px;
+  text-align: center;
+  border-radius: 0 0 30px 30px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  margin-bottom: 30px;
 }
 
-.card-header h3 {
+.page-header h1 {
+  font-size: 2.2rem;
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+
+.header-subtitle {
+  font-size: 1.1rem;
+  opacity: 0.9;
   margin: 0;
 }
 
+/* 内容区域 */
+.content-section {
+  max-width: 1200px;
+  margin: 0 auto 40px;
+  padding: 0 20px;
+}
+
+.tabs-container {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+  margin-bottom: 30px;
+}
+
+.custom-tabs :deep(.el-tabs__item) {
+  font-size: 16px;
+  padding: 0 20px;
+  height: 50px;
+  line-height: 50px;
+}
+
+.custom-tabs :deep(.el-tabs__active-bar) {
+  background: linear-gradient(90deg, #3a8ee6, #5b48d0);
+  height: 3px;
+}
+
+.custom-tabs :deep(.el-tabs__item.is-active) {
+  color: #5b48d0;
+  font-weight: 600;
+}
+
 .upload-area {
-  min-height: 400px;
+  padding: 20px 0;
 }
 
 .upload-dragger {
-  width: 100%;
+  border: 2px dashed #d9ecff;
+  border-radius: 12px;
+  transition: all 0.3s;
+  background-color: #f5f7fa;
 }
 
-.file-info {
-  margin-top: 20px;
+.upload-dragger:hover {
+  border-color: #409eff;
+  background-color: #f0f9ff;
+}
+
+.upload-icon-container {
+  margin-bottom: 15px;
+}
+
+.el-icon--upload {
+  font-size: 60px;
+  color: #409eff;
+  margin-bottom: 10px;
+}
+
+.el-upload__text {
+  font-size: 18px;
+  color: #606266;
+  margin-bottom: 10px;
+}
+
+.el-upload__text em {
+  color: #409eff;
+  font-style: normal;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.el-upload__tip {
+  font-size: 14px;
+  color: #909399;
+  margin-top: 10px;
+}
+
+.file-items-container {
+  background-color: #f9fafc;
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 20px;
 }
 
 .file-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px;
-  border-bottom: 1px solid #ebeef5;
+  padding: 12px;
+  border-radius: 8px;
+  background-color: white;
+  margin-bottom: 8px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s;
+}
+
+.file-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .file-name {
   display: flex;
   align-items: center;
+  font-weight: 500;
 }
 
-.file-name .el-icon {
-  margin-right: 5px;
+.file-type-icon {
+  margin-right: 10px;
+  font-size: 20px;
+  color: #5b48d0;
 }
 
 .file-size {
   color: #909399;
+  font-size: 14px;
 }
 
 .file-form {
-  margin-top: 20px;
-  max-width: 500px;
+  background-color: white;
+  border-radius: 8px;
+  padding: 20px;
+  max-width: 800px;
+  margin: 0 auto;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
 }
 
+.form-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-start;
+  margin-top: 10px;
+}
+
+.upload-button {
+  background: linear-gradient(90deg, #3a8ee6, #5b48d0);
+  border: none;
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.reset-button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 12px 24px;
+}
+
+.upload-progress {
+  margin: 30px 0;
+}
+
+.upload-progress :deep(.el-progress-bar__outer) {
+  border-radius: 8px;
+  background-color: #e9f2ff;
+}
+
+.upload-progress :deep(.el-progress-bar__inner) {
+  border-radius: 8px;
+  background: linear-gradient(90deg, #3a8ee6, #5b48d0);
+}
+
+.progress-text {
+  text-align: center;
+  margin-top: 12px;
+  color: #5b48d0;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.upload-result {
+  margin: 20px 0;
+}
+
+.alert-actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 10px;
+}
+
+.preview-btn, .download-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* 上传历史部分 */
 .upload-history {
   min-height: 400px;
+  padding: 10px 0;
+}
+
+.empty-history {
+  padding: 40px 0;
+}
+
+.empty-icon {
+  font-size: 60px;
+  color: #c0c4cc;
+  margin-bottom: 15px;
+}
+
+.history-table {
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+}
+
+.history-table :deep(th) {
+  background-color: #f5f7fa;
+  font-weight: 600;
+  color: #303133;
+}
+
+.file-name-cell {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: #5b48d0;
+  transition: color 0.3s;
+}
+
+.file-name-cell:hover {
+  color: #3a8ee6;
+}
+
+.file-icon {
+  margin-right: 8px;
+  font-size: 18px;
+}
+
+.resource-tag, .status-tag {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.operation-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-start;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 12px;
+}
+
+.preview-btn, .download-btn {
+  margin: 0;
+}
+
+.delete-btn {
+  margin: 0;
+}
+
+/* 预览对话框 */
+.preview-dialog :deep(.el-dialog__header) {
+  padding: 20px;
+  margin: 0;
+  border-bottom: 1px solid #ebeef5;
+  background-color: #f5f7fa;
+}
+
+.preview-dialog :deep(.el-dialog__title) {
+  font-weight: 600;
+  color: #303133;
 }
 
 .preview-container {
@@ -576,34 +913,23 @@ onMounted(() => {
   display: flex;
   justify-content: center;
   align-items: center;
+  padding: 40px 20px;
+  background-color: #f9fafc;
 }
 
 .unknown-preview {
-  color: #909399;
-  font-size: 16px;
-}
-
-.upload-progress {
-  margin-top: 20px;
-  margin-bottom: 20px;
-}
-
-.progress-text {
   text-align: center;
-  margin-top: 8px;
-  color: #409eff;
-  font-size: 14px;
+  color: #606266;
+  background-color: white;
+  padding: 30px;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
 }
 
-.upload-result {
-  margin-top: 15px;
-  margin-bottom: 15px;
-}
-
-.alert-actions {
-  margin-top: 10px;
-  display: flex;
-  gap: 10px;
+.preview-icon {
+  font-size: 60px;
+  color: #909399;
+  margin-bottom: 20px;
 }
 
 /* 添加上传成功消息的样式 */
@@ -627,16 +953,35 @@ onMounted(() => {
   margin-right: 10px;
 }
 
-.operation-buttons {
+.download-preview-btn {
+  background: linear-gradient(90deg, #3a8ee6, #5b48d0);
+  border: none;
   display: flex;
-  gap: 8px;
-  justify-content: flex-start;
   align-items: center;
-  flex-wrap: nowrap;
+  gap: 5px;
 }
 
-.operation-buttons .el-button {
-  margin: 0;
-  padding: 6px 12px;
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .page-header h1 {
+    font-size: 1.8rem;
+  }
+  
+  .header-subtitle {
+    font-size: 1rem;
+  }
+  
+  .content-section {
+    padding: 0 10px;
+  }
+  
+  .operation-buttons {
+    flex-wrap: wrap;
+  }
+  
+  .action-btn {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
 }
 </style> 

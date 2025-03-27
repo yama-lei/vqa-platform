@@ -1,379 +1,657 @@
 <template>
-  <div class="model-container">
-    <el-row :gutter="20">
-      <el-col :span="24">
-        <el-card class="model-card">
-          <template #header>
-            <div class="card-header">
-              <h3>模型对话</h3>
-              <el-select v-model="selectedModel" placeholder="选择模型">
-                <el-option
-                  v-for="model in models"
-                  :key="model.id"
-                  :label="model.name"
-                  :value="model.id"
-                />
-              </el-select>
-            </div>
-          </template>
-          
-          <div class="chat-container">
-            <div class="chat-messages" ref="chatMessagesRef">
-              <template v-if="messages.length">
-                <div
-                  v-for="(message, index) in messages"
-                  :key="index"
-                  :class="['message', message.role === 'user' ? 'user-message' : 'model-message']"
-                >
-                  <div class="message-avatar">
-                    <el-avatar :size="36" :icon="message.role === 'user' ? UserFilled : Comment" />
-                  </div>
-                  <div class="message-content">
-                    <div class="message-bubble">
-                      <div v-if="message.role === 'model' && message.loading">
-                        <span class="loading-dots">
-                          <i></i><i></i><i></i>
-                        </span>
-                      </div>
-                      <div v-else v-html="formatMessage(message.content)"></div>
-                    </div>
-                    <div class="message-time">{{ message.time }}</div>
-                  </div>
+  <div class="model-chat-container">
+    <!-- 头部区域 -->
+    <div class="header-area">
+      <div class="header-content">
+        <h1 class="title">模型对话</h1>
+        <p class="description">与多种AI模型进行对话，探索不同模型的能力</p>
+      </div>
+    </div>
+
+    <div class="chat-layout">
+      <!-- 侧边栏 - 历史记录 -->
+      <div class="sidebar">
+        <ChatHistory 
+          :model-id="selectedModel" 
+          @select-chat="handleSelectChat" 
+          @create-chat="createNewChat" 
+        />
+      </div>
+
+      <!-- 主对话区域 -->
+      <div class="main-content">
+        <!-- 模型选择区 -->
+        <div class="model-selector">
+          <el-radio-group v-model="selectedModel" @change="handleModelChange" size="large">
+            <el-radio-button label="deepseek-chat">DeepSeek</el-radio-button>
+            <el-radio-button label="model-1">模型1</el-radio-button>
+            <el-radio-button label="model-2">模型2</el-radio-button>
+          </el-radio-group>
+        </div>
+
+        <!-- 聊天容器 -->
+        <div class="chat-container">
+          <!-- 空状态提示 -->
+          <div v-if="!messages.length" class="empty-chat">
+            <el-icon><ChatRound /></el-icon>
+            <h3>{{ getModelWelcomeTitle() }}</h3>
+            <p>{{ getModelWelcomeMessage() }}</p>
+            <el-button type="primary" @click="focusInput">开始对话</el-button>
+          </div>
+
+          <!-- 消息列表 -->
+          <div v-else ref="messagesRef" class="messages-list">
+            <div v-for="(msg, index) in messages" :key="index" :class="['message-item', msg.role]">
+              <div class="message-avatar">
+                <el-avatar :icon="msg.role === 'user' ? UserFilled : Assistant" />
+              </div>
+              <div class="message-content">
+                <div class="message-role">{{ msg.role === 'user' ? '用户' : getModelDisplayName() }}</div>
+                <div class="message-text" v-if="msg.content.text">{{ msg.content.text }}</div>
+                <div class="message-image" v-if="msg.content.image">
+                  <el-image 
+                    :src="msg.content.image" 
+                    fit="contain"
+                    :preview-src-list="[msg.content.image]"
+                  />
                 </div>
-              </template>
-              <div v-else class="empty-chat">
-                <el-empty description="开始与模型对话吧！">
-                  <el-button type="primary" @click="focusInput">开始对话</el-button>
-                </el-empty>
               </div>
             </div>
-            
-            <div class="chat-input">
+            <div v-if="loading" class="message-item assistant">
+              <div class="message-avatar">
+                <el-avatar :icon="Assistant" />
+              </div>
+              <div class="message-content">
+                <div class="message-role">{{ getModelDisplayName() }}</div>
+                <div class="message-loading">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 输入区域 -->
+          <div class="input-area">
+            <div class="image-preview" v-if="imageData">
+              <el-image :src="imageData" fit="cover" />
+              <el-button 
+                type="danger" 
+                circle 
+                size="small" 
+                class="remove-btn"
+                @click="removeImage"
+              >
+                <el-icon><Close /></el-icon>
+              </el-button>
+            </div>
+
+            <div class="input-container">
               <el-input
-                v-model="userInput"
-                type="textarea"
-                :rows="3"
-                placeholder="在这里输入您的问题..."
-                resize="none"
                 ref="inputRef"
-                @keydown.enter.ctrl.prevent="sendMessage"
+                v-model="inputMessage"
+                placeholder="输入您的问题..."
+                :disabled="loading"
+                @keyup.enter.native="sendMessage"
               />
-              <div class="input-actions">
-                <el-tooltip content="上传图片">
-                  <el-button type="primary" :icon="Picture" circle @click="triggerImageUpload" />
+              
+              <div class="action-buttons">
+                <el-tooltip content="上传图片" placement="top" :disabled="!supportsMultimodal()">
+                  <div>
+                    <el-upload
+                      ref="uploadRef"
+                      action=""
+                      :auto-upload="false"
+                      :show-file-list="false"
+                      :on-change="handleImageChange"
+                      accept="image/*"
+                    >
+                      <el-button
+                        :disabled="loading || !supportsMultimodal()"
+                        circle
+                        :class="{'disabled-upload': !supportsMultimodal()}"
+                      >
+                        <el-icon><PictureFilled /></el-icon>
+                      </el-button>
+                    </el-upload>
+                  </div>
                 </el-tooltip>
-                <el-button type="primary" @click="sendMessage" :disabled="!userInput.trim() && !imageUrl">
+                
+                <el-button
+                  type="primary"
+                  :disabled="!canSendMessage || loading"
+                  @click="sendMessage"
+                >
+                  <el-icon><Position /></el-icon>
                   发送
                 </el-button>
               </div>
-              <input
-                type="file"
-                accept="image/*"
-                style="display: none"
-                ref="imageInputRef"
-                @change="handleImageUpload"
-              />
-            </div>
-            
-            <div v-if="imageUrl" class="image-preview">
-              <el-image :src="imageUrl" :preview-src-list="[imageUrl]" fit="contain" style="max-height: 150px;" />
-              <el-button type="danger" size="small" :icon="Delete" circle @click="removeImage" />
             </div>
           </div>
-        </el-card>
-      </el-col>
-    </el-row>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed, nextTick } from 'vue'
-import { UserFilled, Comment, Picture, Delete } from '@element-plus/icons-vue'
-// import { sendVQAQuery } from '../../api/model'
+import { ref, computed, watch, onMounted, nextTick } from 'vue';
+import { ElMessage } from 'element-plus';
+import { 
+  ChatRound, 
+  UserFilled, 
+  Position, 
+  PictureFilled, 
+  Close 
+} from '@element-plus/icons-vue';
+import { chatWithModel, supportsMultimodalInput } from '../../api/model';
+import { 
+  getAllChats,
+  getCurrentChatId,
+  getChat,
+  createChat,
+  updateChat,
+  addMessage 
+} from '../../utils/chatStorage';
+import ChatHistory from './components/ChatHistory.vue';
 
-const selectedModel = ref('')
-const userInput = ref('')
-const messages = ref([])
-const chatMessagesRef = ref(null)
-const inputRef = ref(null)
-const imageInputRef = ref(null)
-const imageUrl = ref('')
+// 模型相关
+const Assistant = ref('ChatLineRound');
+const selectedModel = ref('gpt-3.5-turbo');
+const messages = ref([]);
+const currentChatId = ref('');
 
-// 模拟模型列表
-const models = ref([
-  { id: 'model1', name: 'VQA基础模型' },
-  { id: 'model2', name: 'VQA高级模型' }
-])
+// 输入相关
+const inputRef = ref(null);
+const inputMessage = ref('');
+const imageData = ref('');
+const messagesRef = ref(null);
+const loading = ref(false);
+const uploadRef = ref(null);
 
-// 格式化消息内容（支持简单的Markdown格式）
-const formatMessage = (content) => {
-  let formatted = content
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
-    .replace(/`(.*?)`/g, '<code>$1</code>')
-    .replace(/\n/g, '<br>')
-  
-  return formatted
-}
+// 计算属性：是否可以发送消息
+const canSendMessage = computed(() => {
+  return !!inputMessage.value.trim() || !!imageData.value;
+});
 
-// 发送消息
-const sendMessage = async () => {
-  if (!userInput.value.trim() && !imageUrl.value) return
-  
-  // 添加用户消息
-  const time = new Date().toLocaleTimeString()
-  messages.value.push({
-    role: 'user',
-    content: userInput.value,
-    image: imageUrl.value,
-    time
-  })
-  
-  // 添加模型响应（先显示加载中）
-  messages.value.push({
-    role: 'model',
-    content: '',
-    loading: true,
-    time
-  })
-  
-  // 滚动到底部
-  await nextTick()
-  scrollToBottom()
-  
-  // 保存用户输入然后清空
-  const userMessage = userInput.value
-  const userImage = imageUrl.value
-  userInput.value = ''
-  removeImage()
-  
-  // 模拟API请求
-  setTimeout(() => {
-    // 实际项目中，应该调用后端API
-    // sendVQAQuery({
-    //   modelId: selectedModel.value,
-    //   question: userMessage,
-    //   image: userImage
-    // })
-    
-    // 模拟响应
-    const modelResponses = [
-      "根据图像分析，这是一张包含多个物体的场景。我看到有人、汽车和建筑物。",
-      "这张图片展示的是一个户外环境，有树木和蓝天。时间应该是白天。",
-      "图中显示的是一只猫，它正在沙发上休息。这是一只橙色的短毛猫。",
-      "分析结果表明这是一张食物的图片，看起来像是一盘意大利面。",
-      "这是一个室内场景，我能看到一张桌子和几把椅子。这应该是一个会议室或餐厅。"
-    ]
-    
-    const randomResponse = modelResponses[Math.floor(Math.random() * modelResponses.length)]
-    
-    // 更新模型响应
-    const lastMessage = messages.value.pop()
-    messages.value.push({
-      ...lastMessage,
-      content: randomResponse,
-      loading: false
-    })
-    
-    // 滚动到底部
-    nextTick(() => {
-      scrollToBottom()
-    })
-  }, 1500)
-}
+// 检查模型是否支持多模态输入
+const supportsMultimodal = () => {
+  return supportsMultimodalInput(selectedModel.value);
+};
 
-// 滚动到消息底部
-const scrollToBottom = () => {
-  if (chatMessagesRef.value) {
-    chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight
+// 获取模型显示名称
+const getModelDisplayName = () => {
+  switch (selectedModel.value) {
+    case 'gpt-3.5-turbo':
+      return 'GPT-3.5';
+    case 'deepseek-chat':
+      return 'DeepSeek';
+    case 'model-1':
+      return '模型1';
+    case 'model-2':
+      return '模型2';
+    default:
+      return '助手';
   }
-}
+};
+
+// 获取模型欢迎标题
+const getModelWelcomeTitle = () => {
+  switch (selectedModel.value) {
+    case 'gpt-3.5-turbo':
+      return '欢迎使用 GPT-3.5 Turbo';
+    case 'deepseek-chat':
+      return '欢迎使用 DeepSeek Chat';
+    case 'model-1':
+      return '欢迎使用模型1';
+    case 'model-2':
+      return '欢迎使用模型2';
+    default:
+      return '欢迎开始新对话';
+  }
+};
+
+// 获取模型欢迎消息
+const getModelWelcomeMessage = () => {
+  switch (selectedModel.value) {
+    case 'gpt-3.5-turbo':
+      return 'GPT-3.5 Turbo 是一个功能强大的语言模型，能够理解和生成自然语言，回答问题并完成多种任务。它支持文本和图像输入。';
+    case 'deepseek-chat':
+      return 'DeepSeek Chat 是一个高性能语言模型，专注于深度理解和推理能力。它仅支持文本输入，不支持图像分析。';
+    case 'model-1':
+      return '模型1是一个专业的语言模型，擅长文本生成和分析。它支持文本和图像输入。';
+    case 'model-2':
+      return '模型2是一个多功能的语言模型，具有强大的多模态能力。它支持文本和图像输入，可以进行复杂的分析和生成任务。';
+    default:
+      return '请输入您的问题，AI助手将为您提供回答。';
+  }
+};
 
 // 聚焦输入框
 const focusInput = () => {
-  if (inputRef.value) {
-    inputRef.value.focus()
-  }
-}
+  nextTick(() => {
+    inputRef.value?.focus();
+  });
+};
 
-// 触发图片上传
-const triggerImageUpload = () => {
-  if (imageInputRef.value) {
-    imageInputRef.value.click()
-  }
-}
-
-// 处理图片上传
-const handleImageUpload = (event) => {
-  const file = event.target.files[0]
-  if (file) {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      imageUrl.value = e.target.result
+// 滚动到底部
+const scrollToBottom = () => {
+  nextTick(() => {
+    if (messagesRef.value) {
+      messagesRef.value.scrollTop = messagesRef.value.scrollHeight;
     }
-    reader.readAsDataURL(file)
-  }
-}
+  });
+};
+
+// 处理图片变更
+const handleImageChange = (file) => {
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    imageData.value = e.target.result;
+  };
+  reader.readAsDataURL(file.raw);
+};
 
 // 移除图片
 const removeImage = () => {
-  imageUrl.value = ''
-  if (imageInputRef.value) {
-    imageInputRef.value.value = ''
+  imageData.value = '';
+  if (uploadRef.value) {
+    uploadRef.value.clearFiles();
   }
-}
+};
 
-onMounted(() => {
-  // 默认选择第一个模型
-  if (models.value.length > 0) {
-    selectedModel.value = models.value[0].id
+// 发送消息
+const sendMessage = async () => {
+  if (!canSendMessage.value || loading.value) return;
+  
+  // 如果没有当前聊天ID，创建一个新的聊天
+  if (!currentChatId.value) {
+    createNewChat();
   }
-})
+  
+  const userMessage = {
+    role: 'user',
+    content: {
+      text: inputMessage.value.trim(),
+      image: imageData.value || null
+    }
+  };
+  
+  // 添加用户消息到界面
+  messages.value.push(userMessage);
+  
+  // 保存用户消息到存储
+  addMessage(currentChatId.value, userMessage);
+  
+  // 清空输入
+  inputMessage.value = '';
+  removeImage();
+  
+  // 滚动到底部
+  scrollToBottom();
+  
+  // 显示加载状态
+  loading.value = true;
+  
+  try {
+    // 调用API
+    const response = await chatWithModel(
+      selectedModel.value,
+      messages.value
+    );
+    
+    // 添加模型回复到界面
+    messages.value.push({
+      role: 'assistant',
+      content: {
+        text: response.text || '',
+        image: response.image || null
+      }
+    });
+    
+    // 保存模型回复到存储
+    addMessage(currentChatId.value, {
+      role: 'assistant',
+      content: {
+        text: response.text || '',
+        image: response.image || null
+      }
+    });
+    
+    // 滚动到底部
+    scrollToBottom();
+  } catch (error) {
+    console.error('Error in chat:', error);
+    ElMessage.error('发送失败：' + (error.message || '未知错误'));
+  } finally {
+    loading.value = false;
+  }
+};
+
+// 创建新聊天
+const createNewChat = () => {
+  const newChatId = createChat(selectedModel.value);
+  currentChatId.value = newChatId;
+  messages.value = [];
+};
+
+// 处理选择聊天
+const handleSelectChat = (chatId) => {
+  if (chatId === currentChatId.value) return;
+  
+  const chat = getChat(chatId);
+  if (chat) {
+    currentChatId.value = chatId;
+    selectedModel.value = chat.modelId;
+    messages.value = chat.messages || [];
+    scrollToBottom();
+  }
+};
+
+// 处理模型变更
+const handleModelChange = () => {
+  createNewChat();
+};
+
+// 监听模型变化
+watch(() => selectedModel.value, () => {
+  // 模型变化时可以在这里添加额外逻辑
+});
+
+// 组件挂载时初始化
+onMounted(() => {
+  // 尝试加载当前聊天
+  const savedChatId = getCurrentChatId();
+  if (savedChatId) {
+    const chat = getChat(savedChatId);
+    if (chat) {
+      currentChatId.value = savedChatId;
+      selectedModel.value = chat.modelId;
+      messages.value = chat.messages || [];
+      return;
+    }
+  }
+  
+  // 如果没有当前聊天或找不到聊天记录，创建新聊天
+  createNewChat();
+});
 </script>
 
 <style scoped>
-.model-container {
-  min-height: 600px;
-}
-
-.model-card {
-  height: calc(100vh - 140px);
+.model-chat-container {
   display: flex;
   flex-direction: column;
+  min-height: 100vh;
+  background-color: #f5f7fa;
 }
 
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+/* 头部区域 */
+.header-area {
+  background: linear-gradient(135deg, #3a8ee6 0%, #5b48d0 100%);
+  color: white;
+  padding: 30px 20px;
+  text-align: center;
+  border-radius: 0 0 30px 30px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  margin-bottom: 30px;
 }
 
-.card-header h3 {
+.header-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.title {
+  font-size: 2rem;
+  margin: 0 0 10px;
+  font-weight: 600;
+}
+
+.description {
+  font-size: 1rem;
+  opacity: 0.9;
   margin: 0;
 }
 
-.chat-container {
+/* 聊天布局 */
+.chat-layout {
+  display: flex;
+  width: 90%;
+  margin: auto;
+  flex: 1;
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+/* 侧边栏 */
+.sidebar {
+  width: 300px;
+  background-color: #fff;
+  height: calc(100vh - 180px);
+}
+
+/* 主内容区 */
+.main-content {
   flex: 1;
   display: flex;
   flex-direction: column;
-  height: calc(100% - 40px);
+  border-left: 1px solid #ebeef5;
 }
 
-.chat-messages {
+/* 模型选择区 */
+.model-selector {
+  padding: 15px;
+  border-bottom: 1px solid #ebeef5;
+  background-color: #f9fafb;
+  text-align: center;
+}
+
+/* 聊天容器 */
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 180px - 65px); /* 减去头部和模型选择区高度 */
+}
+
+/* 空状态 */
+.empty-chat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 20px;
+  text-align: center;
+}
+
+.empty-chat .el-icon {
+  font-size: 4rem;
+  color: #409eff;
+  margin-bottom: 20px;
+}
+
+.empty-chat h3 {
+  font-size: 1.5rem;
+  color: #303133;
+  margin-bottom: 10px;
+}
+
+.empty-chat p {
+  color: #606266;
+  margin-bottom: 20px;
+  max-width: 500px;
+  line-height: 1.6;
+}
+
+/* 消息列表 */
+.messages-list {
   flex: 1;
   overflow-y: auto;
-  padding: 10px;
-  background-color: #f9f9f9;
-  border-radius: 5px;
-  margin-bottom: 20px;
+  padding: 20px;
 }
 
-.message {
+.message-item {
   display: flex;
   margin-bottom: 20px;
-}
-
-.user-message {
-  flex-direction: row-reverse;
 }
 
 .message-avatar {
-  margin: 0 10px;
+  margin-right: 12px;
 }
 
 .message-content {
-  max-width: 70%;
+  flex: 1;
+  max-width: calc(100% - 50px);
 }
 
-.message-bubble {
-  padding: 10px 15px;
-  border-radius: 10px;
-  word-wrap: break-word;
+.message-role {
+  font-size: 0.8rem;
+  color: #909399;
+  margin-bottom: 4px;
 }
 
-.user-message .message-bubble {
-  background-color: #409EFF;
-  color: white;
-  border-top-right-radius: 0;
+.message-text {
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
-.model-message .message-bubble {
-  background-color: #f1f1f1;
-  color: #333;
-  border-top-left-radius: 0;
+.message-image {
+  margin-top: 8px;
+  max-width: 400px;
 }
 
-.message-time {
-  font-size: 12px;
-  color: #999;
-  margin-top: 5px;
-  text-align: right;
+.message-image .el-image {
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
 }
 
-.user-message .message-content {
-  align-items: flex-end;
+/* 用户消息 */
+.message-item.user .message-text {
+  background-color: #ecf5ff;
+  color: #303133;
 }
 
-.chat-input {
-  margin-top: auto;
-  position: relative;
+/* 助手消息 */
+.message-item.assistant .message-text {
+  background-color: #f4f4f5;
+  color: #303133;
 }
 
-.input-actions {
+/* 加载动画 */
+.message-loading {
   display: flex;
-  justify-content: space-between;
-  margin-top: 10px;
+  padding: 15px;
+  background-color: #f4f4f5;
+  border-radius: 8px;
 }
 
-.empty-chat {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100%;
-}
-
-.image-preview {
-  margin-top: 10px;
-  position: relative;
+.message-loading span {
   display: inline-block;
-}
-
-.image-preview .el-button {
-  position: absolute;
-  top: 5px;
-  right: 5px;
-}
-
-.loading-dots {
-  display: inline-flex;
-  align-items: center;
-}
-
-.loading-dots i {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: #aaa;
+  width: 8px;
+  height: 8px;
   margin: 0 2px;
-  animation: loading 1.4s infinite ease-in-out both;
+  background-color: #909399;
+  border-radius: 50%;
+  animation: bounce 1.4s infinite ease-in-out both;
 }
 
-.loading-dots i:nth-child(1) {
+.message-loading span:nth-child(1) {
   animation-delay: -0.32s;
 }
 
-.loading-dots i:nth-child(2) {
+.message-loading span:nth-child(2) {
   animation-delay: -0.16s;
 }
 
-@keyframes loading {
-  0%, 80%, 100% { 
+@keyframes bounce {
+  0%, 80%, 100% {
     transform: scale(0);
-  } 
-  40% { 
-    transform: scale(1.0);
+  }
+  40% {
+    transform: scale(1);
+  }
+}
+
+/* 输入区域 */
+.input-area {
+  padding: 15px;
+  border-top: 1px solid #ebeef5;
+  background-color: #fff;
+}
+
+.image-preview {
+  position: relative;
+  margin-bottom: 10px;
+  display: inline-block;
+}
+
+.image-preview .el-image {
+  width: 100px;
+  height: 100px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.remove-btn {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.input-container {
+  display: flex;
+  align-items: center;
+}
+
+.input-container .el-input {
+  flex: 1;
+}
+
+.action-buttons {
+  display: flex;
+  margin-left: 10px;
+}
+
+.action-buttons .el-button {
+  margin-left: 8px;
+}
+
+.disabled-upload {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .chat-layout {
+    flex-direction: column;
+    margin: 10px;
+  }
+  
+  .sidebar {
+    width: 100%;
+    height: auto;
+    max-height: 200px;
+  }
+  
+  .chat-container {
+    height: calc(100vh - 180px - 65px - 200px);
+  }
+  
+  .message-image {
+    max-width: 100%;
   }
 }
 </style> 

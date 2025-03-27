@@ -1,85 +1,127 @@
 <template>
   <div class="resources-container">
-    <el-card>
-      <template #header>
-        <div class="card-header">
-          <h3>资源中心</h3>
-          <el-input
-            v-model="searchKeyword"
-            placeholder="搜索资源"
-            prefix-icon="Search"
-            clearable
-            style="width: 300px"
-            @input="handleSearch"
+    <!-- 顶部标题区域 -->
+    <div class="page-header">
+      <h1>资源中心</h1>
+      <p class="header-subtitle">浏览和下载小组共享的学习资料、论文、代码和笔记</p>
+    </div>
+    
+    <!-- 主内容区域 -->
+    <div class="content-section">
+      <div class="search-filter-area">
+        <el-input
+          v-model="searchKeyword"
+          placeholder="搜索资源"
+          prefix-icon="Search"
+          clearable
+          class="search-input"
+          @input="handleSearch"
+        />
+        
+        <el-tabs v-model="activeTab" @tab-click="handleTabClick" class="resource-tabs">
+          <el-tab-pane label="全部" name="all"></el-tab-pane>
+          <el-tab-pane label="论文" name="paper"></el-tab-pane>
+          <el-tab-pane label="代码" name="code"></el-tab-pane>
+          <el-tab-pane label="笔记" name="note"></el-tab-pane>
+          <el-tab-pane label="视频" name="video"></el-tab-pane>
+        </el-tabs>
+      </div>
+      
+      <div class="resources-table-container">
+        <el-empty v-if="!filteredResources.length" description="暂无资源" class="empty-resources">
+          <template #image>
+            <el-icon class="empty-icon"><Files /></el-icon>
+          </template>
+        </el-empty>
+        
+        <el-table 
+          v-else 
+          :data="filteredResources" 
+          style="width: 100%" 
+          v-loading="loading"
+          class="resources-table"
+        >
+          <el-table-column label="资源名称" prop="name">
+            <template #default="scope">
+              <div class="resource-name" @click="previewResource(scope.row)">
+                <el-icon>
+                  <Document v-if="scope.row.type === 'paper' || scope.row.type === 'note'" />
+                  <Folder v-if="scope.row.type === 'code'" />
+                  <VideoPlay v-if="scope.row.type === 'video'" />
+                  <Files v-if="scope.row.type === 'other'" />
+                </el-icon>
+                <span>{{ scope.row.name }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="类型" prop="type" width="120">
+            <template #default="scope">
+              <el-tag 
+                :type="getTagType(scope.row.type)" 
+                effect="light"
+                class="resource-tag"
+              >
+                {{ getTypeLabel(scope.row.type) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="上传时间" prop="uploadTime" width="180"></el-table-column>
+          <el-table-column label="上传者" prop="uploader" width="120"></el-table-column>
+          <el-table-column label="操作" width="180">
+            <template #default="scope">
+              <div class="action-buttons">
+                <el-button 
+                  size="small" 
+                  class="download-btn"
+                  @click="downloadResource(scope.row)"
+                >
+                  <el-icon><Download /></el-icon>下载
+                </el-button>
+                <el-button 
+                  size="small" 
+                  type="primary" 
+                  class="preview-btn"
+                  @click="previewResource(scope.row)"
+                >
+                  <el-icon><View /></el-icon>预览
+                </el-button>
+              </div>
+            </template>
+          </el-table-column>
+        </el-table>
+        
+        <div class="pagination-container">
+          <el-pagination
+            background
+            layout="prev, pager, next"
+            :total="totalResources"
+            :current-page="currentPage"
+            :page-size="pageSize"
+            @current-change="handleCurrentChange"
           />
         </div>
-      </template>
-      
-
-      <el-tabs v-model="activeTab" @tab-click="handleTabClick">
-        <el-tab-pane label="全部" name="all"></el-tab-pane>
-        <el-tab-pane label="论文" name="paper"></el-tab-pane>
-        <el-tab-pane label="代码" name="code"></el-tab-pane>
-        <el-tab-pane label="笔记" name="note"></el-tab-pane>
-        <el-tab-pane label="视频" name="video"></el-tab-pane>
-      </el-tabs>
-      
-      <el-empty v-if="!filteredResources.length" description="暂无资源"></el-empty>
-      
-      <el-table v-else :data="filteredResources" style="width: 100%" v-loading="loading">
-        <el-table-column label="资源名称" prop="name">
-          <template #default="scope">
-            <div class="resource-name" @click="previewResource(scope.row)">
-              <el-icon>
-                <Document v-if="scope.row.type === 'paper' || scope.row.type === 'note'" />
-                <Folder v-if="scope.row.type === 'code'" />
-                <VideoPlay v-if="scope.row.type === 'video'" />
-              </el-icon>
-              <span>{{ scope.row.name }}</span>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column label="类型" prop="type" width="120">
-          <template #default="scope">
-            <el-tag v-if="scope.row.type === 'paper'" type="primary">论文</el-tag>
-            <el-tag v-if="scope.row.type === 'code'" type="success">代码</el-tag>
-            <el-tag v-if="scope.row.type === 'note'" type="warning">笔记</el-tag>
-            <el-tag v-if="scope.row.type === 'video'" type="danger">视频</el-tag>
-            <el-tag v-if="scope.row.type === 'other'" type="info">其他</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="上传时间" prop="uploadTime" width="180"></el-table-column>
-        <el-table-column label="上传者" prop="uploader" width="120"></el-table-column>
-        <el-table-column label="操作" width="180">
-          <template #default="scope">
-            <el-button size="small" @click="downloadResource(scope.row)">下载</el-button>
-            <el-button size="small" type="primary" @click="previewResource(scope.row)">预览</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-      
-      <div class="pagination-container">
-        <el-pagination
-          background
-          layout="prev, pager, next"
-          :total="totalResources"
-          :current-page="currentPage"
-          :page-size="pageSize"
-          @current-change="handleCurrentChange"
-        />
       </div>
-    </el-card>
+    </div>
     
     <!-- 资源预览对话框 -->
-    <el-dialog v-model="previewDialogVisible" :title="currentResource?.name" width="80%" destroy-on-close>
+    <el-dialog 
+      v-model="previewDialogVisible" 
+      :title="currentResource?.name" 
+      width="80%" 
+      destroy-on-close
+      class="preview-dialog"
+    >
       <div class="preview-container">
         <div class="unknown-preview">
+          <el-icon class="preview-icon"><Document /></el-icon>
           <p>该文件类型暂不支持预览，请下载后查看</p>
         </div>
       </div>
       <template #footer>
         <el-button @click="previewDialogVisible = false">关闭</el-button>
-        <el-button type="primary" @click="downloadResource(currentResource)">下载</el-button>
+        <el-button type="primary" @click="downloadResource(currentResource)">
+          <el-icon><Download /></el-icon>下载
+        </el-button>
       </template>
     </el-dialog>
   </div>
@@ -88,7 +130,15 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { marked } from 'marked'
-import { Document, Folder, VideoPlay, Search } from '@element-plus/icons-vue'
+import { 
+  Document, 
+  Folder, 
+  VideoPlay, 
+  Search, 
+  Download, 
+  View,
+  Files
+} from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { downloadFile as ossDownload, listFiles, getSignedUrl, createOssClient } from '../../utils/oss'
 import VuePdfEmbed from 'vue-pdf-embed'
@@ -107,6 +157,28 @@ const ossConfig = ref(null) // 添加OSS配置的状态
 
 // 资源列表，实际项目中从后端或本地存储获取
 const resources = ref([])
+
+// 获取标签类型
+const getTagType = (resourceType) => {
+  switch (resourceType) {
+    case 'paper': return 'primary'
+    case 'code': return 'success'
+    case 'note': return 'warning'
+    case 'video': return 'danger'
+    default: return 'info'
+  }
+}
+
+// 获取类型显示文本
+const getTypeLabel = (resourceType) => {
+  switch (resourceType) {
+    case 'paper': return '论文'
+    case 'code': return '代码'
+    case 'note': return '笔记'
+    case 'video': return '视频'
+    default: return '其他'
+  }
+}
 
 // 根据当前标签和搜索关键词过滤资源
 const filteredResources = computed(() => {
@@ -351,45 +423,199 @@ const openInNewTab = (url) => {
 
 <style scoped>
 .resources-container {
-  min-height: 400px;
+  padding: 0;
+  background-color: #f9fafc;
+  min-height: 100vh;
 }
 
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+/* 顶部标题区域 */
+.page-header {
+  background: linear-gradient(135deg, #3a8ee6 0%, #5b48d0 100%);
+  color: white;
+  padding: 30px 20px;
+  text-align: center;
+  border-radius: 0 0 30px 30px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  margin-bottom: 30px;
 }
 
-.card-header h3 {
+.page-header h1 {
+  font-size: 2.2rem;
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+
+.header-subtitle {
+  font-size: 1.1rem;
+  opacity: 0.9;
   margin: 0;
+}
+
+/* 内容区域 */
+.content-section {
+  max-width: 1200px;
+  margin: 0 auto 40px;
+  padding: 0 20px;
+}
+
+.search-filter-area {
+  margin-bottom: 20px;
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+}
+
+.search-input {
+  max-width: 400px;
+  margin-bottom: 20px;
+}
+
+.search-input :deep(.el-input__wrapper) {
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.resource-tabs :deep(.el-tabs__item) {
+  font-size: 16px;
+  padding: 0 20px;
+}
+
+.resource-tabs :deep(.el-tabs__active-bar) {
+  background: linear-gradient(90deg, #3a8ee6, #5b48d0);
+  height: 3px;
+}
+
+.resources-table-container {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+}
+
+.resources-table :deep(.el-table__header-wrapper) {
+  background-color: #f9fafc;
+}
+
+.resources-table :deep(th) {
+  background-color: #f9fafc;
+  font-weight: 600;
+  color: #303133;
 }
 
 .resource-name {
   display: flex;
   align-items: center;
   cursor: pointer;
-  color: #409EFF;
+  color: #5b48d0;
+  transition: color 0.3s;
+}
+
+.resource-name:hover {
+  color: #3a8ee6;
 }
 
 .resource-name .el-icon {
-  margin-right: 5px;
+  margin-right: 8px;
+  font-size: 18px;
+}
+
+.resource-tag {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.download-btn, .preview-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+}
+
+.download-btn .el-icon, .preview-btn .el-icon {
+  margin-right: 4px;
+}
+
+.preview-btn {
+  background: linear-gradient(90deg, #3a8ee6, #5b48d0);
+  border: none;
 }
 
 .pagination-container {
   margin-top: 20px;
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
+}
+
+/* 空状态样式 */
+.empty-resources {
+  padding: 40px 0;
+}
+
+.empty-icon {
+  font-size: 60px;
+  color: #c0c4cc;
+  margin-bottom: 20px;
+}
+
+/* 预览对话框 */
+.preview-dialog :deep(.el-dialog__header) {
+  padding: 20px;
+  margin: 0;
+  border-bottom: 1px solid #ebeef5;
 }
 
 .preview-container {
   min-height: 400px;
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
+  padding: 40px 20px;
 }
 
 .unknown-preview {
+  text-align: center;
+  color: #606266;
+}
+
+.preview-icon {
+  font-size: 60px;
   color: #909399;
+  margin-bottom: 20px;
+}
+
+.unknown-preview p {
   font-size: 16px;
+  margin: 0;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .page-header h1 {
+    font-size: 1.8rem;
+  }
+  
+  .header-subtitle {
+    font-size: 1rem;
+  }
+  
+  .content-section {
+    padding: 0 10px;
+  }
+  
+  .search-input {
+    width: 100%;
+  }
+  
+  .action-buttons {
+    flex-direction: column;
+  }
 }
 </style> 
