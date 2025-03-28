@@ -7,7 +7,7 @@ const repoName = 'vqa-platform'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  base: '/',
+  base: '/vqa-platform/',
   plugins: [vue()],
   resolve: {
     alias: {
@@ -22,13 +22,17 @@ export default defineConfig({
     outDir: 'dist',
     assetsDir: 'assets',
     emptyOutDir: true,
+    assetsInlineLimit: 409600,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor': ['vue', 'vue-router', 'pinia'],
-          'element-plus': ['element-plus'],
-          'element-plus-icons': ['@element-plus/icons-vue']
-        }
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            return 'vendor';
+          }
+        },
+        assetFileNames: 'assets/[name]-[hash][extname]',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        entryFileNames: 'assets/[name]-[hash].js'
       }
     },
     chunkSizeWarningLimit: 2000
