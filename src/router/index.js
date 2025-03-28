@@ -36,6 +36,14 @@ const routes = [
         meta: {
           title: '文件上传'
         }
+      },
+      {
+        path: '/learning',
+        name: 'Learning',
+        component: () => import('../views/learning/index.vue'),
+        meta: {
+          title: '学习空间'
+        }
       }
     ]
   },

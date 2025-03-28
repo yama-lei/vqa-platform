@@ -23,6 +23,10 @@
       <el-icon><Upload /></el-icon>
       <span>文件上传</span>
     </el-menu-item>
+    <el-menu-item index="/learning">
+      <el-icon><Reading /></el-icon>
+      <span>学习空间</span>
+    </el-menu-item>
   </el-menu>
 </template>
 
@@ -33,7 +37,8 @@ import {
   HomeFilled, 
   Document, 
   ChatLineRound, 
-  Upload 
+  Upload,
+  Reading
 } from '@element-plus/icons-vue'
 
 const route = useRoute()

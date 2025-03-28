@@ -607,7 +607,10 @@ onMounted(() => {
 <style scoped>
 .upload-container {
   min-height: 100vh;
-  background-color: #f9fafc;
+  background-color: #f5f7fa;
+  padding: 0;
+  margin: 0;
+  overflow-x: hidden;
 }
 
 /* 顶部标题区域 */

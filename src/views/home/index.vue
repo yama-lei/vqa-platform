@@ -23,7 +23,7 @@
     </div>
     
     <el-row :gutter="30" class="feature-row">
-      <el-col :xs="24" :sm="12" :md="8">
+      <el-col :xs="24" :sm="12" :md="6">
         <div class="feature-card" @click="router.push('/resources')">
           <div class="feature-icon">
             <el-icon><Document /></el-icon>
@@ -36,7 +36,7 @@
         </div>
       </el-col>
       
-      <el-col :xs="24" :sm="12" :md="8">
+      <el-col :xs="24" :sm="12" :md="6">
         <div class="feature-card" @click="router.push('/model')">
           <div class="feature-icon model-icon">
             <el-icon><ChatLineRound /></el-icon>
@@ -49,7 +49,7 @@
         </div>
       </el-col>
       
-      <el-col :xs="24" :sm="12" :md="8">
+      <el-col :xs="24" :sm="12" :md="6">
         <div class="feature-card" @click="router.push('/upload')">
           <div class="feature-icon upload-icon">
             <el-icon><Upload /></el-icon>
@@ -58,6 +58,19 @@
           <p>上传您的学习资料、笔记或分享文件，与小组成员共享研究成果。</p>
           <div class="feature-card-action">
             <el-button type="primary" text>上传文件</el-button>
+          </div>
+        </div>
+      </el-col>
+      
+      <el-col :xs="24" :sm="12" :md="6">
+        <div class="feature-card" @click="router.push('/learning')">
+          <div class="feature-icon learning-icon">
+            <el-icon><Reading /></el-icon>
+          </div>
+          <h3>学习空间</h3>
+          <p>探索VQA相关的学习资源，包括教程、论文和开源项目，提升技术能力。</p>
+          <div class="feature-card-action">
+            <el-button type="primary" text>开始学习</el-button>
           </div>
         </div>
       </el-col>
@@ -98,7 +111,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Document, ChatLineRound, Upload, Calendar } from '@element-plus/icons-vue'
+import { Document, ChatLineRound, Upload, Calendar, Reading } from '@element-plus/icons-vue'
 
 const router = useRouter()
 
@@ -116,7 +129,7 @@ const activities = ref([
     type: 'info'
   },
   {
-    content: 'VQA学习小组网站Version 1.0正式上线',
+    content: 'VQA学习小组网站Version 1.0偷偷上线',
     time: '2025-03-20',
     type: 'primary'
   },
@@ -131,8 +144,10 @@ const activities = ref([
 <style scoped>
 .home-container {
   padding: 0;
+  margin: 0;
   background-color: #f9fafc;
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 /* 顶部英雄区域 */
@@ -143,7 +158,7 @@ const activities = ref([
   text-align: center;
   border-radius: 0 0 30px 30px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-  margin-bottom: 40px;
+  margin: 0 0 40px 0;
 }
 
 .hero-content {
@@ -248,6 +263,11 @@ const activities = ref([
 .upload-icon {
   background: #fef0f0;
   color: #f56c6c;
+}
+
+.learning-icon {
+  background-color: #6236FF;
+  color: white;
 }
 
 .feature-card h3 {

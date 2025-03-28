@@ -618,4 +618,12 @@ const openInNewTab = (url) => {
     flex-direction: column;
   }
 }
+
+.resources-page {
+  min-height: 100vh;
+  background-color: #f5f7fa;
+  padding: 0;
+  margin: 0;
+  overflow-x: hidden;
+}
 </style> 

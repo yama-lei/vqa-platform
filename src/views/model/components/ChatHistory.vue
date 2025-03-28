@@ -86,6 +86,10 @@ const currentChatId = ref('');
 
 // 过滤当前模型的聊天记录
 const filteredChatList = computed(() => {
+  // 确保modelId是有效值
+  if (!props.modelId || !chatList.value || !chatList.value.length) {
+    return [];
+  }
   return chatList.value.filter(chat => chat.modelId === props.modelId);
 });
 

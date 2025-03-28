@@ -23,9 +23,13 @@
         <!-- 模型选择区 -->
         <div class="model-selector">
           <el-radio-group v-model="selectedModel" @change="handleModelChange" size="large">
-            <el-radio-button label="deepseek-chat">DeepSeek</el-radio-button>
-            <el-radio-button label="model-1">模型1</el-radio-button>
-            <el-radio-button label="model-2">模型2</el-radio-button>
+            <el-radio-button 
+              v-for="modelId in getAvailableModelIds()" 
+              :key="modelId" 
+              :label="modelId"
+            >
+              {{ getModelInfoById(modelId)?.name || modelId }}
+            </el-radio-button>
           </el-radio-group>
         </div>
 
@@ -143,9 +147,15 @@ import {
   UserFilled, 
   Position, 
   PictureFilled, 
-  Close 
+  Close
 } from '@element-plus/icons-vue';
-import { chatWithModel, supportsMultimodalInput } from '../../api/model';
+import { 
+  sendChatRequest, 
+  supportsMultimodalInput, 
+  AVAILABLE_MODELS,
+  getModelInfo,
+  getAvailableModels
+} from '../../api/chat';
 import { 
   getAllChats,
   getCurrentChatId,
@@ -158,7 +168,7 @@ import ChatHistory from './components/ChatHistory.vue';
 
 // 模型相关
 const Assistant = ref('ChatLineRound');
-const selectedModel = ref('gpt-3.5-turbo');
+const selectedModel = ref('deepseek-chat');
 const messages = ref([]);
 const currentChatId = ref('');
 
@@ -182,49 +192,33 @@ const supportsMultimodal = () => {
 
 // 获取模型显示名称
 const getModelDisplayName = () => {
-  switch (selectedModel.value) {
-    case 'gpt-3.5-turbo':
-      return 'GPT-3.5';
-    case 'deepseek-chat':
-      return 'DeepSeek';
-    case 'model-1':
-      return '模型1';
-    case 'model-2':
-      return '模型2';
-    default:
-      return '助手';
-  }
+  const modelInfo = getModelInfo(selectedModel.value);
+  return modelInfo ? modelInfo.name : '助手';
 };
 
 // 获取模型欢迎标题
 const getModelWelcomeTitle = () => {
-  switch (selectedModel.value) {
-    case 'gpt-3.5-turbo':
-      return '欢迎使用 GPT-3.5 Turbo';
-    case 'deepseek-chat':
-      return '欢迎使用 DeepSeek Chat';
-    case 'model-1':
-      return '欢迎使用模型1';
-    case 'model-2':
-      return '欢迎使用模型2';
-    default:
-      return '欢迎开始新对话';
-  }
+  const modelInfo = getModelInfo(selectedModel.value);
+  return modelInfo ? `欢迎使用 ${modelInfo.name}` : '欢迎开始新对话';
 };
 
 // 获取模型欢迎消息
 const getModelWelcomeMessage = () => {
+  const modelInfo = getModelInfo(selectedModel.value);
+  if (!modelInfo) return '请输入您的问题，AI助手将为您提供回答。';
+  
+  // 根据模型提供合适的欢迎消息
   switch (selectedModel.value) {
-    case 'gpt-3.5-turbo':
-      return 'GPT-3.5 Turbo 是一个功能强大的语言模型，能够理解和生成自然语言，回答问题并完成多种任务。它支持文本和图像输入。';
     case 'deepseek-chat':
-      return 'DeepSeek Chat 是一个高性能语言模型，专注于深度理解和推理能力。它仅支持文本输入，不支持图像分析。';
+      return 'DeepSeek Chat 是一个功能强大的大语言模型，支持文本和图像分析，可以回答问题、描述图像并进行聊天对话。';
+    case 'deepseek-reasoner':
+      return 'DeepSeek Reasoner 是一个专注于推理能力的大语言模型，具有更强的逻辑分析和推理能力，适合复杂问题求解。';
     case 'model-1':
-      return '模型1是一个专业的语言模型，擅长文本生成和分析。它支持文本和图像输入。';
+      return '模型1是我们小组开发的视觉问答模型，支持文本和图像输入，能够针对上传的图片回答问题。';
     case 'model-2':
-      return '模型2是一个多功能的语言模型，具有强大的多模态能力。它支持文本和图像输入，可以进行复杂的分析和生成任务。';
+      return '模型2是我们小组开发的增强版视觉问答模型，具有更强的分析和理解能力，支持文本和图像输入。';
     default:
-      return '请输入您的问题，AI助手将为您提供回答。';
+      return `${modelInfo.name}：${modelInfo.description}`;
   }
 };
 
@@ -297,18 +291,27 @@ const sendMessage = async () => {
   loading.value = true;
   
   try {
+    // 准备历史消息格式 - 转换为后端API期望的格式
+    // 后端API期望的历史格式是 {role: 'user'/'assistant', content: '消息内容'}
+    const history = messages.value.slice(0, -1).map(msg => ({
+      role: msg.role,
+      content: msg.content.text // 仅发送文本内容
+    }));
+    
     // 调用API
-    const response = await chatWithModel(
-      selectedModel.value,
-      messages.value
-    );
+    const response = await sendChatRequest({
+      model: selectedModel.value,
+      message: userMessage.content.text,
+      image: userMessage.content.image,
+      history: history
+    });
     
     // 添加模型回复到界面
     messages.value.push({
       role: 'assistant',
       content: {
         text: response.text || '',
-        image: response.image || null
+        image: null // 后端不返回图片
       }
     });
     
@@ -317,7 +320,7 @@ const sendMessage = async () => {
       role: 'assistant',
       content: {
         text: response.text || '',
-        image: response.image || null
+        image: null
       }
     });
     
@@ -333,7 +336,9 @@ const sendMessage = async () => {
 
 // 创建新聊天
 const createNewChat = () => {
-  const newChatId = createChat(selectedModel.value);
+  // 确保使用可用的模型ID
+  const modelId = AVAILABLE_MODELS[selectedModel.value] ? selectedModel.value : 'deepseek-chat';
+  const newChatId = createChat(modelId);
   currentChatId.value = newChatId;
   messages.value = [];
 };
@@ -378,6 +383,16 @@ onMounted(() => {
   // 如果没有当前聊天或找不到聊天记录，创建新聊天
   createNewChat();
 });
+
+// 获取所有可用模型ID
+const getAvailableModelIds = () => {
+  return getAvailableModels();
+};
+
+// 根据ID获取模型信息
+const getModelInfoById = (modelId) => {
+  return getModelInfo(modelId);
+};
 </script>
 
 <style scoped>
@@ -386,17 +401,23 @@ onMounted(() => {
   flex-direction: column;
   min-height: 100vh;
   background-color: #f5f7fa;
+  padding-bottom: 50px;
+  margin: 0;
+  position: relative;
+  overflow-x: hidden;
 }
 
 /* 头部区域 */
 .header-area {
   background: linear-gradient(135deg, #3a8ee6 0%, #5b48d0 100%);
   color: white;
-  padding: 30px 20px;
+  padding: 20px 20px;
   text-align: center;
   border-radius: 0 0 30px 30px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-  margin-bottom: 30px;
+  margin: 0 0 30px 0;
+  position: relative;
+  z-index: 10;
 }
 
 .header-content {
@@ -427,6 +448,8 @@ onMounted(() => {
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
   overflow: hidden;
+  position: relative; /* 确保相对定位 */
+  z-index: 1; /* 设置较低的z-index */
 }
 
 /* 侧边栏 */
