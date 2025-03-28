@@ -38,6 +38,9 @@ jobs:
         run: |
           cp public/404.html dist/
           echo 'vqa.yama-lei.top' > dist/CNAME
+          # 确保所有静态资源使用绝对路径
+          find dist -type f -name "*.html" -exec sed -i 's/\.\/assets\//\/assets\//g' {} +
+          find dist -type f -name "*.js" -exec sed -i 's/\.\/assets\//\/assets\//g' {} +
 
       - name: Deploy 🚀
         uses: JamesIves/github-pages-deploy-action@v4
