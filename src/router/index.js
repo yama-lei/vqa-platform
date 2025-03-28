@@ -55,7 +55,7 @@ const routes = [
 ]
 
 const router = createRouter({
-  history: createWebHistory('/vqa-platform/'),
+  history: createWebHistory('/'),
   routes
 })
 
