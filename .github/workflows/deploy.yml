@@ -20,10 +20,20 @@ jobs:
       - name: Install dependencies 📦
         run: npm install
 
+      - name: Setup Git User 🔧
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "github-actions-bot@users.noreply.github.com"
+
       - name: Build 🏗️
-        run: npm run deploy:github
+        run: npm run build
         env:
           VITE_API_KEY: lIlI****
+
+      - name: Prepare deployment 📝
+        run: |
+          cp public/404.html dist/
+          echo 'vqa.yama-lei.top' > dist/CNAME
 
       - name: Deploy 🚀
         uses: JamesIves/github-pages-deploy-action@v4
