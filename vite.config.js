@@ -7,7 +7,7 @@ const repoName = 'vqa-platform' // 替换为您实际的GitHub仓库名称
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  base: '/',  // 使用根路径作为基础路径
+  base: process.env.NODE_ENV === 'production' ? `/${repoName}/` : '/',  // GitHub Pages需要使用仓库名作为基础路径
   plugins: [vue()],
   resolve: {
     alias: {
