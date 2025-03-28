@@ -6,8 +6,16 @@
   <title>页面未找到 | VQA平台</title>
   <script>
     // SPA路由回退处理
-    sessionStorage.redirect = location.href;
-    window.location.href = '/';
+    (function() {
+      var redirect = sessionStorage.redirect;
+      delete sessionStorage.redirect;
+      
+      if (redirect && redirect != location.href) {
+        history.replaceState(null, null, redirect);
+      } else {
+        window.location.href = '/';
+      }
+    })();
   </script>
 </head>
 <body>
