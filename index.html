@@ -1,10 +1,35 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="./vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>VQA Platform</title>
+    <title>VQA学习小组平台</title>
+    <!-- GitHub Pages SPA路由处理 -->
+    <script type="text/javascript">
+      // 处理GitHub Pages上的SPA路由
+      (function() {
+        // 解析来自404.html的重定向参数
+        var redirect = sessionStorage.redirect;
+        delete sessionStorage.redirect;
+        
+        // 检查URL中是否有路由参数
+        var searchParams = new URLSearchParams(window.location.search);
+        var path = searchParams.get('p');
+        
+        if (path) {
+          // 如果存在p参数，重定向到正确的路径
+          history.replaceState(null, null, 
+            path + 
+            (searchParams.has('q') ? '?' + searchParams.get('q').replace(/~and~/g, '&') : '') + 
+            location.hash
+          );
+        } else if (redirect && redirect != location.href) {
+          // 如果存在从404.html保存的重定向路径，使用它
+          history.replaceState(null, null, redirect);
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>
