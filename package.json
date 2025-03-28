@@ -10,8 +10,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy": "npm run build && cp public/_redirects dist/",
-    "deploy:github": "vite build && cp public/404.html dist/ && echo 'vqa.yama-lei.top' > dist/CNAME"
+    "deploy": "npm run build && copy public\\_redirects dist\\",
+    "deploy:github": "vite build && copy public\\404.html dist\\ && echo vqa.yama-lei.top > dist\\CNAME && npx gh-pages -d dist"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
