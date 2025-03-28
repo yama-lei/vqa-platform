@@ -7,7 +7,7 @@ const repoName = 'vqa-platform'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  base: process.env.NODE_ENV === 'production' ? `/${repoName}/` : '/',
+  base: '/vqa-platform/',
   plugins: [vue()],
   resolve: {
     alias: {
