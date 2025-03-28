@@ -3,12 +3,12 @@ import { createRouter, createWebHistory } from 'vue-router'
 const routes = [
   {
     path: '/',
-    component: () => import('../components/layout/MainLayout.vue'),
+    component: () => import('@/components/layout/MainLayout.vue'),
     children: [
       {
         path: '/',
         name: 'Home',
-        component: () => import('../views/home/index.vue'),
+        component: () => import('@/views/home/index.vue'),
         meta: {
           title: '首页'
         }
@@ -16,7 +16,7 @@ const routes = [
       {
         path: '/resources',
         name: 'Resources',
-        component: () => import('../views/resources/index.vue'),
+        component: () => import('@/views/resources/index.vue'),
         meta: {
           title: '资源中心'
         }
@@ -24,7 +24,7 @@ const routes = [
       {
         path: '/model',
         name: 'Model',
-        component: () => import('../views/model/index.vue'),
+        component: () => import('@/views/model/index.vue'),
         meta: {
           title: '模型对话'
         }
@@ -32,7 +32,7 @@ const routes = [
       {
         path: '/upload',
         name: 'Upload',
-        component: () => import('../views/upload/index.vue'),
+        component: () => import('@/views/upload/index.vue'),
         meta: {
           title: '文件上传'
         }
@@ -40,7 +40,7 @@ const routes = [
       {
         path: '/learning',
         name: 'Learning',
-        component: () => import('../views/learning/index.vue'),
+        component: () => import('@/views/learning/index.vue'),
         meta: {
           title: '学习空间'
         }
@@ -50,7 +50,7 @@ const routes = [
   {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
-    component: () => import('../views/NotFound.vue')
+    component: () => import('@/views/NotFound.vue')
   }
 ]
 
